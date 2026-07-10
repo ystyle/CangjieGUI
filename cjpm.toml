@@ -1,0 +1,9 @@
+[package]
+cjc-version = "1.0.5"
+name = "cui"
+version = "0.1.0"
+output-type = "static"
+description = "Declarative desktop GUI framework for Cangjie on SDL3."
+
+[ffi.c]
+SDL3 = { path = "./.sdl3" }
