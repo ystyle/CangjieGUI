@@ -1,4 +1,4 @@
-# CUI
+# CUI: Cangjie Declarative UI Framework
 
 CUI is a Cangjie desktop GUI framework built on SDL3. The module is split into two
 layers behind a single umbrella package:
@@ -12,22 +12,22 @@ layers behind a single umbrella package:
 - **`cui`** — an umbrella that re-exports both, so applications just `import cui.*`.
 
 <table>
-<tr>
-<td>
-<img src="https://github.com/user-attachments/assets/0fb6c314-467f-4b8d-b7aa-63f510c3131b" />
-</td>
-<td>
-<img src="https://github.com/user-attachments/assets/64292a58-7fcc-4e60-b827-1daa3269db26" />
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/user-attachments/assets/f4dcdab4-2a34-4882-96d3-e20728d99409" />
-</td>
-<td>
-<img src="https://github.com/user-attachments/assets/8afb89c4-2618-4b6c-88a8-dfaa13356f2b" />
-</td>
-</tr>
+    <tr>
+        <td>
+            <img src="https://github.com/user-attachments/assets/0fb6c314-467f-4b8d-b7aa-63f510c3131b" />
+        </td>
+        <td>
+            <img src="https://github.com/user-attachments/assets/64292a58-7fcc-4e60-b827-1daa3269db26" />
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <img src="https://github.com/user-attachments/assets/f4dcdab4-2a34-4882-96d3-e20728d99409" />
+        </td>
+        <td>
+            <img src="https://github.com/user-attachments/assets/8afb89c4-2618-4b6c-88a8-dfaa13356f2b" />
+        </td>
+    </tr>
 </table>
 
 ## Declarative UI
