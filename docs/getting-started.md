@@ -41,19 +41,21 @@ cui = { path = "../CangjieGUI" }
 ```cangjie
 package hello_cui
 
-import cui.{Button, ButtonRole, DesktopApp, Insets, Label, Panel, State, VStack, WindowSpec}
+import cui.{Button, ButtonRole, DesktopApp, Label, LengthUnits, Panel, State, VStack, WindowSpec}
 
 main(): Unit {
     let message = State<String>("你好，CUI")
     let app = DesktopApp(WindowSpec("首个 CUI 应用", 640, 420))
 
     app.run {
-        VStack(spacing: 12.0, padding: Insets(20.0)) {
-            Panel(flexible: false) {
+        VStack {
+            Panel {
                 Label(message.value)
-            }
-            Button("更新文本", {=> message.value = "欢迎使用仓颉 GUI"}, role: ButtonRole.Primary)
-        }
+            }.flexible(false)
+            Button("更新文本", {=> message.value = "欢迎使用仓颉 GUI"})
+                .role(ButtonRole.Primary)
+                .width(180.vp)
+        }.spacing(12.vp).padding(20.vp)
     }
 }
 ```
@@ -64,6 +66,26 @@ main(): Unit {
 - `app.run` 的尾随 Lambda 是根视图构建函数，每帧都会重新执行。
 - `State<String>` 位于构建闭包外，因此状态不会随控件实例重建而丢失。
 - 在容器构建块中创建的控件会自动成为该容器的子项。
+- 构造函数只承载文本、状态、事件等必要信息；尺寸和外观通过链式修饰器表达。
+- 尺寸以“整数 + 单位”书写：导入 `LengthUnits` 后，`180.vp` 是密度无关的虚拟像素，
+  `15.fp` 是跟随字体缩放的字号，`100.px` 是物理像素。
+- 修饰器顺序有语义，例如 `.padding(12.vp).background(color)` 会让背景包含 padding。
+
+## 局部状态
+
+简单共享状态建议放在应用模型中。仅属于某个子树的临时状态可由框架跨帧保留：
+
+```cangjie
+import cui.{Keyed, LengthUnits, TextField, rememberState}
+
+Keyed("profile.editor") {
+    let nickname = rememberState<String>("nickname") { "仓颉开发者" }
+    TextField("profile.nickname", nickname).width(260.vp)
+}
+```
+
+`Keyed` 建立稳定命名空间，`rememberState` 在子树仍挂载时复用同一状态；子树从成功构建的视图树中
+消失后，对应局部状态会被清理。重复列表应使用业务主键，而不是可变化的位置索引。
 
 ## 构建与运行
 
@@ -83,12 +105,15 @@ import cui.{DesktopApp, Theme, WindowSpec}
 let app = DesktopApp(
     WindowSpec("深色界面", 960, 640, resizable: true, highDpi: true, scale: 1.0),
     theme: Theme.dark(),
-    frameDelay: UInt32(16)
+    frameDelay: UInt32(16),
+    fontScale: 1.0
 )
+app.setMinimumSize(640, 480)
 ```
 
-`WindowSpec.width` 和 `height` 是逻辑尺寸；`scale` 会影响实际窗口像素和事件坐标换算。无明确需求时
-保留 `scale: 1.0`，并启用 `highDpi`。
+`WindowSpec.width` 和 `height` 是逻辑尺寸；`scale` 会影响实际窗口像素、事件坐标换算与 `px`
+单位的解析。`fontScale` 全局缩放所有 `fp` 尺寸。可缩放窗口建议调用 `setMinimumSize` 设置
+设计最小尺寸，避免内容被挤出窗口。无明确需求时保留 `scale: 1.0`，并启用 `highDpi`。
 
 ## 下一步
 

@@ -1,22 +1,28 @@
 package cui.text
 
 import sdl.{FontSizes, Key, MouseButton, Rect, Size, UiEvent}
-import cui.core.{CUI_CONTROL_H, State, UiContext, Widget, emit}
+import cui.core.{Bindable, CUI_CONTROL_H, State, UiContext, Widget, emit, localState}
 
 public class TextField <: Widget {
     private let id: String
-    private let text: State<String>
-    private let cursor: State<Int64>
+    private let text: Bindable<String>
+    private var cursorStateValue: State<Int64>
     private var frame = Rect.zero()
 
-    public init(id: String, text: State<String>, cursor!: ?State<Int64> = None) {
+    public init(id: String, text: Bindable<String>, cursor!: ?State<Int64> = None) {
         this.id = id
         this.text = text
-        this.cursor = match (cursor) {
+        this.cursorStateValue = match (cursor) {
             case Some(value) => value
-            case None => State<Int64>(text.value.size)
+            case None => localState<Int64>("TextField:${id}:cursor") {text.value.size}
         }
         emit(this)
+    }
+
+    /** Uses an externally owned UTF-8 cursor byte offset. */
+    public func cursorState(value: State<Int64>): TextField {
+        cursorStateValue = value
+        this
     }
 
     public func measure(_: UiContext, available: Size): Size {
@@ -28,13 +34,18 @@ public class TextField <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
-        TextEditState(text, cursor: Some(cursor)).normalizeCursor()
-        drawTextFieldBox(ctx, frame, id, text.value)
-        drawTextFieldCursor(ctx, frame, id, text.value, cursor.value)
+        TextEditState(text, cursor: Some(cursorStateValue)).normalizeCursor()
+        drawTextBoxChrome(ctx, frame, id)
+        // Values longer than the field must not paint past its surface; the caret is
+        // clipped together with the text.
+        ctx.renderer.pushClip(frame.inset(2.0))
+        drawTextFieldText(ctx, frame, text.value)
+        drawTextFieldCursor(ctx, frame, id, text.value, cursorStateValue.value)
+        ctx.renderer.popClip()
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
-        let edit = TextEditState(text, cursor: Some(cursor))
+        let edit = TextEditState(text, cursor: Some(cursorStateValue))
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) => return focusIfInside(ctx, edit, x, y)
             case UiEvent.TextInput(value) =>
@@ -75,8 +86,7 @@ public class TextField <: Widget {
     }
 }
 
-private func drawTextFieldBox(ctx: UiContext, frame: Rect, id: String, text: String): Unit {
-    drawTextBoxChrome(ctx, frame, id)
+private func drawTextFieldText(ctx: UiContext, frame: Rect, text: String): Unit {
     let textY = frame.centerY() - ctx.renderer.textHeight(pointSize: FontSizes.BODY) / 2.0
     ctx.renderer.text(text, frame.x + 8.0, textY, ctx.theme.text, pointSize: FontSizes.BODY)
 }

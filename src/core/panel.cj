@@ -4,37 +4,75 @@ import sdl.{Insets, Rect, Size, SurfaceStyle, UiEvent}
 
 public class Panel <: Widget {
     private let child: Widget
-    private let padding: Insets
-    private let style: ?SurfaceStyle
-    private let flexible: Bool
+    private var panelInsets: LengthInsets
+    private var customStyle: ?SurfaceStyle
+    private var isFlexiblePanel: Bool
     private var frame = Rect.zero()
 
     public init(
-        padding!: Insets = Insets(12.0),
+        padding!: LengthInsets = LengthInsets(vpLength(12.0)),
         style!: ?SurfaceStyle = None,
         flexible!: Bool = true,
         body!: () -> Unit
     ) {
         child = buildChild(body)
-        this.padding = padding
-        this.style = style
-        this.flexible = flexible
+        this.panelInsets = padding
+        this.customStyle = style
+        this.isFlexiblePanel = flexible
         emit(this)
     }
 
+    /** Sets the inset between the panel surface and its content, e.g. `16.vp`. */
+    public func contentPadding(all: Length): Panel {
+        panelInsets = LengthInsets(all)
+        this
+    }
+
+    /** Sets independent horizontal and vertical content insets. */
+    public func contentPadding(horizontal: Length, vertical: Length): Panel {
+        panelInsets = LengthInsets(horizontal, vertical)
+        this
+    }
+
+    /** Sets per-edge content insets. */
+    public func contentPadding(value: LengthInsets): Panel {
+        panelInsets = value
+        this
+    }
+
+    /** Sets content insets from already-resolved logical-pixel values. */
+    public func contentPadding(value: Insets): Panel {
+        panelInsets = LengthInsets.of(value)
+        this
+    }
+
+    /** Overrides the theme panel surface. */
+    public func style(value: SurfaceStyle): Panel {
+        customStyle = Some(value)
+        this
+    }
+
+    /** Controls whether the panel participates in its enclosing stack's flex pass. */
+    public func flexible(value: Bool): Panel {
+        isFlexiblePanel = value
+        this
+    }
+
     public func measure(ctx: UiContext, available: Size): Size {
-        let inner = Size(max(0.0, available.w - padding.horizontal()), max(0.0, available.h - padding.vertical()))
+        let insets = ctx.resolve(panelInsets)
+        let inner = Size(max(0.0, available.w - insets.horizontal()), max(0.0, available.h - insets.vertical()))
         let measured = child.measure(ctx, inner)
-        Size(min(available.w, measured.w + padding.horizontal()), min(available.h, measured.h + padding.vertical()))
+        Size(min(available.w, measured.w + insets.horizontal()),
+            min(available.h, measured.h + insets.vertical()))
     }
 
     public func layout(ctx: UiContext, rect: Rect): Unit {
         frame = rect
-        child.layout(ctx, frame.inset(padding))
+        child.layout(ctx, frame.inset(ctx.resolve(panelInsets)))
     }
 
     public func draw(ctx: UiContext): Unit {
-        match (style) {
+        match (customStyle) {
             case Some(value) => drawSurface(ctx, frame, value)
             case None => drawSurface(ctx, frame, ctx.theme.panelSurface())
         }
@@ -46,6 +84,6 @@ public class Panel <: Widget {
     }
 
     public func isFlexible(): Bool {
-        flexible && child.isFlexible()
+        isFlexiblePanel && child.isFlexible()
     }
 }

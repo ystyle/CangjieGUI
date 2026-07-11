@@ -1,6 +1,6 @@
 package cui.core
 
-import sdl.{Color, FontSizes, IconName, MouseButton, Rect, Size, SurfaceStyle, UiEvent, drawIcon}
+import sdl.{Color, FontSizes, IconName, Key, MouseButton, Rect, Size, SurfaceStyle, UiEvent, drawIcon}
 
 private let ICON_DEFAULT_SIZE: Float32 = 18.0
 private let ICON_BUTTON_PAD: Float32 = 10.0
@@ -8,19 +8,37 @@ private let ICON_TEXT_GAP: Float32 = 8.0
 
 public class Icon <: Widget {
     private let icon: IconName
-    private let size: Float32
-    private let color: ?Color
+    private var iconExtent: Length
+    private var iconColorOverride: ?Color
     private var frame = Rect.zero()
 
-    public init(icon: IconName, size!: Float32 = ICON_DEFAULT_SIZE, color!: ?Color = None) {
+    public init(icon: IconName, size!: Length = Length(ICON_DEFAULT_SIZE, LengthUnit.Vp), color!: ?Color = None) {
         this.icon = icon
-        this.size = size
-        this.color = color
+        this.iconExtent = size
+        this.iconColorOverride = color
         emit(this)
     }
 
-    public func measure(_: UiContext, _: Size): Size {
-        Size(size, size)
+    /** Sets the square icon extent, e.g. `.iconSize(22.vp)`. */
+    public func iconSize(value: Length): Icon {
+        iconExtent = value
+        this
+    }
+
+    /** Sets the square icon extent in virtual pixels. */
+    public func iconSize(value: Float32): Icon {
+        iconSize(vpLength(value))
+    }
+
+    /** Overrides the theme-derived icon color. */
+    public func foregroundColor(value: Color): Icon {
+        iconColorOverride = Some(value)
+        this
+    }
+
+    public func measure(ctx: UiContext, _: Size): Size {
+        let extent = resolvedExtent(ctx)
+        Size(extent, extent)
     }
 
     public func layout(_: UiContext, rect: Rect): Unit {
@@ -28,7 +46,11 @@ public class Icon <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
-        drawIcon(ctx.renderer, icon, centeredIconRect(frame, size), iconColor(ctx))
+        drawIcon(ctx.renderer, icon, centeredIconRect(frame, resolvedExtent(ctx)), iconColor(ctx))
+    }
+
+    private func resolvedExtent(ctx: UiContext): Float32 {
+        max(1.0, ctx.resolve(iconExtent))
     }
 
     public func handle(_: UiContext, _: UiEvent): Bool {
@@ -36,7 +58,7 @@ public class Icon <: Widget {
     }
 
     private func iconColor(ctx: UiContext): Color {
-        match (color) {
+        match (iconColorOverride) {
             case Some(value) => value
             case None => ctx.theme.text
         }
@@ -45,10 +67,11 @@ public class Icon <: Widget {
 
 public class IconButton <: Widget {
     private let icon: IconName
-    private let label: ?String
-    private let role: ButtonRole
-    private let style: ?SurfaceStyle
+    private var labelText: ?String
+    private var buttonRole: ButtonRole
+    private var customStyle: ?SurfaceStyle
     private let onClick: () -> Unit
+    private var controlId: String
     private var frame = Rect.zero()
 
     public init(
@@ -59,15 +82,52 @@ public class IconButton <: Widget {
         onClick!: () -> Unit
     ) {
         this.icon = icon
-        this.label = label
-        this.role = role
-        this.style = style
+        this.labelText = label
+        this.buttonRole = role
+        this.customStyle = style
         this.onClick = onClick
+        // The build-order identity keeps several icon-only buttons in one view distinct;
+        // a shared id would let one button swallow the release meant for another.
+        this.controlId = controlIdentity(match (label) {
+            case Some(value) => "IconButton:${value}"
+            case None => "IconButton"
+        })
         emit(this)
     }
 
+    /**
+     * Sets an explicit focus and press identity. Defaults are already unique per build;
+     * set one when identity must survive tree reshapes.
+     * Throws `IllegalArgumentException` when `value` is empty.
+     */
+    public func id(value: String): IconButton {
+        if (value.isEmpty()) {
+            throw IllegalArgumentException("IconButton id must not be empty")
+        }
+        controlId = value
+        this
+    }
+
+    /** Adds a text label beside the icon. */
+    public func label(value: String): IconButton {
+        labelText = Some(value)
+        this
+    }
+
+    /** Applies semantic button coloring. */
+    public func role(value: ButtonRole): IconButton {
+        buttonRole = value
+        this
+    }
+
+    /** Overrides the theme-derived button surface. */
+    public func style(value: SurfaceStyle): IconButton {
+        customStyle = Some(value)
+        this
+    }
+
     public func measure(ctx: UiContext, available: Size): Size {
-        let width = match (label) {
+        let width = match (labelText) {
             case Some(value) => max(76.0,
                 ICON_BUTTON_PAD * 2.0 + ICON_DEFAULT_SIZE + ICON_TEXT_GAP + ctx.renderer.textWidth(value))
             case None => CUI_CONTROL_H
@@ -83,7 +143,7 @@ public class IconButton <: Widget {
         drawSurface(ctx, frame, buttonStyle(ctx))
         let color = contentColor(ctx)
         drawIcon(ctx.renderer, icon, iconFrame(), color)
-        match (label) {
+        match (labelText) {
             case Some(value) => ctx
                 .renderer
                 .text(value, iconFrame().right() + ICON_TEXT_GAP,
@@ -93,10 +153,28 @@ public class IconButton <: Widget {
         }
     }
 
-    public func handle(_: UiContext, event: UiEvent): Bool {
+    public func handle(ctx: UiContext, event: UiEvent): Bool {
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
+                    ctx.focus(controlId)
+                    ctx.press(controlId)
+                    return true
+                }
+            case UiEvent.MouseUp(MouseButton.Left, x, y) =>
+                if (ctx.isPressed(controlId)) {
+                    if (frame.contains(x, y)) {
+                        onClick()
+                    }
+                    return true
+                }
+            case UiEvent.KeyDown(Key.Enter, _) =>
+                if (ctx.hasFocus(controlId)) {
+                    onClick()
+                    return true
+                }
+            case UiEvent.KeyDown(Key.Space, _) =>
+                if (ctx.hasFocus(controlId)) {
                     onClick()
                     return true
                 }
@@ -106,7 +184,7 @@ public class IconButton <: Widget {
     }
 
     private func iconFrame(): Rect {
-        match (label) {
+        match (labelText) {
             case Some(_) => Rect(
                 frame.x + ICON_BUTTON_PAD,
                 frame.centerY() - ICON_DEFAULT_SIZE / 2.0,
@@ -118,24 +196,30 @@ public class IconButton <: Widget {
     }
 
     private func contentColor(ctx: UiContext): Color {
-        match (role) {
+        match (buttonRole) {
             case ButtonRole.Normal => ctx.theme.text
             case _ => ctx.theme.accentText
         }
     }
 
     private func buttonStyle(ctx: UiContext): SurfaceStyle {
-        match (style) {
+        match (customStyle) {
             case Some(value) => value
             case None =>
-                let base = ctx.theme.buttonSurface(role)
-                match (role) {
+                let base = ctx.theme.buttonSurface(buttonRole)
+                match (buttonRole) {
                     case ButtonRole.Normal =>
-                        if (frame.contains(ctx.mouseX, ctx.mouseY)) {
-                            base.withFill(ctx.theme.fieldActive)
-                        } else {
-                            base
+                        var style = base
+                        if (ctx.isPressed(controlId)) {
+                            style = style.withFill(ctx.theme.accentSoft)
+                        } else if (frame.contains(ctx.mouseX, ctx.mouseY)) {
+                            style = style.withFill(ctx.theme.fieldActive)
                         }
+                        // A keyboard-operable control shows where Enter/Space will land.
+                        if (ctx.hasFocus(controlId)) {
+                            style = style.withBorder(ctx.theme.accent)
+                        }
+                        style
                     case _ => base
                 }
         }
@@ -143,20 +227,32 @@ public class IconButton <: Widget {
 }
 
 public class Divider <: Widget {
-    private let axis: Axis
-    private let color: ?Color
+    private var dividerAxis: Axis
+    private var dividerColor: ?Color
     private var frame = Rect.zero()
 
     public init(axis!: Axis = Axis.Horizontal, color!: ?Color = None) {
-        this.axis = axis
-        this.color = color
+        this.dividerAxis = axis
+        this.dividerColor = color
         emit(this)
+    }
+
+    /** Sets the divider orientation. */
+    public func axis(value: Axis): Divider {
+        dividerAxis = value
+        this
+    }
+
+    /** Overrides the theme divider color. */
+    public func color(value: Color): Divider {
+        dividerColor = Some(value)
+        this
     }
 
     public func measure(_: UiContext, _: Size): Size {
         // A divider only contributes its 1px thickness to a container's content size; the
         // parent's layout stretches it along the cross axis to span its siblings.
-        match (axis) {
+        match (dividerAxis) {
             case Axis.Horizontal => Size(0.0, 1.0)
             case Axis.Vertical => Size(1.0, 0.0)
         }
@@ -167,7 +263,7 @@ public class Divider <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
-        let c = match (color) {
+        let c = match (dividerColor) {
             case Some(value) => value
             case None => ctx.theme.panelEdge
         }
@@ -179,7 +275,7 @@ public class Divider <: Widget {
     }
 
     private func dividerRect(): Rect {
-        match (axis) {
+        match (dividerAxis) {
             case Axis.Horizontal => Rect(frame.x, frame.centerY(), frame.w, 1.0)
             case Axis.Vertical => Rect(frame.centerX(), frame.y + 4.0, 1.0, max(0.0, frame.h - 8.0))
         }

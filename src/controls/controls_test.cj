@@ -53,6 +53,60 @@ func segmentedControlSelectsClickedSegment(): Unit {
 }
 
 @Test
+func switchActivatesOnReleaseAndSupportsKeyboard(): Unit {
+    let ctx = controlTestContext()
+    let checked = State<Bool>(false)
+    let control = Switch("Notifications", checked).id("notifications")
+    control.layout(ctx, Rect(0.0, 0.0, 180.0, 38.0))
+
+    @Expect(control.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 12.0, 12.0)))
+    @Expect(!checked.value)
+    @Expect(control.handle(ctx, UiEvent.MouseUp(MouseButton.Left, 12.0, 12.0)))
+    @Expect(checked.value)
+    @Expect(control.handle(ctx, UiEvent.KeyDown(Key.Space, false)))
+    @Expect(!checked.value)
+}
+
+@Test
+func radioButtonsShareOneSelectionState(): Unit {
+    let ctx = controlTestContext()
+    let selected = State<Int64>(1)
+    let control = RadioButton("Detailed", selected, 2)
+    control.layout(ctx, Rect(0.0, 0.0, 180.0, 38.0))
+
+    let _ = control.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 12.0, 12.0))
+    let _ = control.handle(ctx, UiEvent.MouseUp(MouseButton.Left, 12.0, 12.0))
+
+    @Expect(selected.value, Int64(2))
+}
+
+@Test
+func pickerWrapsSelectionAndRespondsToArrowKeys(): Unit {
+    let ctx = controlTestContext()
+    let selected = State<Int64>(0)
+    let picker = Picker("density", ["Compact", "Comfortable", "Spacious"], selected)
+    picker.layout(ctx, Rect(0.0, 0.0, 190.0, 38.0))
+
+    @Expect(picker.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 8.0, 12.0)))
+    @Expect(selected.value, Int64(2))
+    @Expect(picker.handle(ctx, UiEvent.KeyDown(Key.Right, false)))
+    @Expect(selected.value, Int64(0))
+}
+
+@Test
+func stepperClampsRangeWithoutIntegerOverflow(): Unit {
+    let ctx = controlTestContext()
+    let value = State<Int64>(9)
+    let stepper = Stepper("quantity", value).range(0, 10).step(3)
+    stepper.layout(ctx, Rect(0.0, 0.0, 144.0, 38.0))
+
+    @Expect(stepper.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 136.0, 12.0)))
+    @Expect(value.value, Int64(10))
+    @Expect(stepper.handle(ctx, UiEvent.KeyDown(Key.Left, false)))
+    @Expect(value.value, Int64(7))
+}
+
+@Test
 func tabViewSelectsHeaderWithoutPages(): Unit {
     let ctx = controlTestContext()
     let selected = State<Int64>(0)

@@ -1,13 +1,13 @@
 package cui.core
 
-import sdl.{Insets, Rect, Size, UiEvent}
+import sdl.{Rect, Size, UiEvent}
 
 public class VStack <: Widget {
     private let stack: Stack
 
     public init(
-        spacing!: Float32 = CUI_GAP,
-        padding!: Insets = Insets(0.0),
+        spacing!: Length = vpLength(CUI_GAP),
+        padding!: LengthInsets = LengthInsets.zero(),
         flexible!: Bool = true,
         body!: () -> Unit
     ) {
@@ -34,14 +34,43 @@ public class VStack <: Widget {
     public func isFlexible(): Bool {
         stack.isFlexible()
     }
+
+    /** Sets the gap between adjacent children, e.g. `.spacing(12.vp)`. */
+    public func spacing(value: Length): VStack {
+        stack.setSpacing(value)
+        this
+    }
+
+    /** Sets the gap between adjacent children in virtual pixels. */
+    public func spacing(value: Float32): VStack {
+        spacing(vpLength(value))
+    }
+
+    /** Positions children along the vertical axis when unused space remains. */
+    public func mainAxisAlignment(value: MainAxisAlignment): VStack {
+        stack.setMainAlignment(value)
+        this
+    }
+
+    /** Positions children along the horizontal axis. */
+    public func crossAxisAlignment(value: CrossAxisAlignment): VStack {
+        stack.setCrossAlignment(value)
+        this
+    }
+
+    /** Controls whether this stack itself participates in its parent's flex pass. */
+    public func flexible(value: Bool): VStack {
+        stack.setFlexible(value)
+        this
+    }
 }
 
 public class HStack <: Widget {
     private let stack: Stack
 
     public init(
-        spacing!: Float32 = CUI_GAP,
-        padding!: Insets = Insets(0.0),
+        spacing!: Length = vpLength(CUI_GAP),
+        padding!: LengthInsets = LengthInsets.zero(),
         flexible!: Bool = true,
         body!: () -> Unit
     ) {
@@ -68,6 +97,35 @@ public class HStack <: Widget {
     public func isFlexible(): Bool {
         stack.isFlexible()
     }
+
+    /** Sets the gap between adjacent children, e.g. `.spacing(12.vp)`. */
+    public func spacing(value: Length): HStack {
+        stack.setSpacing(value)
+        this
+    }
+
+    /** Sets the gap between adjacent children in virtual pixels. */
+    public func spacing(value: Float32): HStack {
+        spacing(vpLength(value))
+    }
+
+    /** Positions children along the horizontal axis when unused space remains. */
+    public func mainAxisAlignment(value: MainAxisAlignment): HStack {
+        stack.setMainAlignment(value)
+        this
+    }
+
+    /** Positions children along the vertical axis. */
+    public func crossAxisAlignment(value: CrossAxisAlignment): HStack {
+        stack.setCrossAlignment(value)
+        this
+    }
+
+    /** Controls whether this stack itself participates in its parent's flex pass. */
+    public func flexible(value: Bool): HStack {
+        stack.setFlexible(value)
+        this
+    }
 }
 
 /**
@@ -75,7 +133,7 @@ public class HStack <: Widget {
  * stretched to `weight` shares of the leftover space instead of hugging its content, so
  * equal-weight cells form aligned columns and a heavier cell spans several of them:
  *
- *     HStack(spacing: 10.0) {
+ *     HStack(spacing: 10.vp) {
  *         Flexible(weight: 2.0) { Button("0", onZero) }   // twice as wide as the others
  *         Flexible { Button(".", onDot) }
  *         Flexible { Button("=", onEquals) }

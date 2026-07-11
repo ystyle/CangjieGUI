@@ -1,63 +1,190 @@
 package cui.core
 
-import sdl.{Insets, Rect, Size, UiEvent}
+import sdl.{Rect, Size, UiEvent}
+
+/** Aggregates of the fixed-measure pass, shared between the layout passes. */
+struct FixedPass {
+    let mainTotal: Float32
+    let weightTotal: Float32
+    let flexCount: Int64
+    let participating: Int64
+
+    init(mainTotal: Float32, weightTotal: Float32, flexCount: Int64, participating: Int64) {
+        this.mainTotal = mainTotal
+        this.weightTotal = weightTotal
+        this.flexCount = flexCount
+        this.participating = participating
+    }
+}
 
 /*
  * Flex layout engine shared by VStack and HStack. Internal on purpose: it takes a
  * ready-made child array and never registers itself with a builder block, so callers
  * (the stack facades and buildChild) stay in control of what is emitted.
+ *
+ * Both axes run the same algorithm through main/cross accessors. Layout measures every
+ * participating child exactly once per pass: non-flexible children while summing the
+ * fixed extent, flexible children after their share of the leftover space is known.
  */
 class Stack <: Widget {
     private let axis: Axis
     private let children: Array<Widget>
-    private let spacing: Float32
-    private let padding: Insets
-    private let flexible: Bool
+    private var spacing: Length
+    private let contentPadding: LengthInsets
+    private var flexible: Bool
+    private var mainAlignment = MainAxisAlignment.Start
+    private var crossAlignment = CrossAxisAlignment.Stretch
 
     init(
         axis: Axis,
         children: Array<Widget>,
-        spacing!: Float32 = CUI_GAP,
-        padding!: Insets = Insets(0.0),
+        spacing!: Length = vpLength(CUI_GAP),
+        padding!: LengthInsets = LengthInsets.zero(),
         flexible!: Bool = true
     ) {
         this.axis = axis
         this.children = children
         this.spacing = spacing
-        this.padding = padding
+        this.contentPadding = padding
         this.flexible = flexible
+    }
+
+    func setSpacing(value: Length): Unit {
+        spacing = value
+    }
+
+    func setFlexible(value: Bool): Unit {
+        flexible = value
+    }
+
+    func setMainAlignment(value: MainAxisAlignment): Unit {
+        mainAlignment = value
+    }
+
+    func setCrossAlignment(value: CrossAxisAlignment): Unit {
+        crossAlignment = value
     }
 
     // Content size along the main axis is the sum of child extents; the cross axis hugs
     // the tallest/widest child. This lets a container opt out of filling (flexible: false)
     // and be laid out at exactly the size of what it holds, e.g. a compact toolbar row.
     public func measure(ctx: UiContext, available: Size): Size {
-        let inner = Size(max(0.0, available.w - padding.horizontal()), max(0.0, available.h - padding.vertical()))
+        let padding = ctx.resolve(contentPadding)
+        let inner = Size(
+            max(0.0, available.w - padding.horizontal()),
+            max(0.0, available.h - padding.vertical())
+        )
         var along: Float32 = 0.0
         var cross: Float32 = 0.0
+        var participating: Int64 = 0
         for (child in children) {
-            let size = child.measure(ctx, inner)
-            match (axis) {
-                case Axis.Horizontal =>
-                    along += size.w
-                    cross = max(cross, size.h)
-                case Axis.Vertical =>
-                    along += size.h
-                    cross = max(cross, size.w)
+            if (!child.participatesInLayout()) {
+                continue
             }
+            participating += 1
+            let size = child.measure(ctx, inner)
+            along += mainOf(size)
+            cross = max(cross, crossOf(size))
         }
-        along += spacingTotal()
+        along += gapTotal(resolvedGap(ctx), participating)
         match (axis) {
             case Axis.Horizontal => Size(along + padding.horizontal(), cross + padding.vertical())
             case Axis.Vertical => Size(cross + padding.horizontal(), along + padding.vertical())
         }
     }
 
+    /*
+     * Three passes, each child measured exactly once: size the non-flexible children,
+     * share the leftover space among flexible ones, then place everything.
+     */
     public func layout(ctx: UiContext, rect: Rect): Unit {
-        let inner = rect.inset(padding)
-        match (axis) {
-            case Axis.Vertical => layoutVertical(ctx, inner)
-            case Axis.Horizontal => layoutHorizontal(ctx, inner)
+        let inner = rect.inset(ctx.resolve(contentPadding))
+        let gap = resolvedGap(ctx)
+        let count = children.size
+        let extents = Array<Float32>(count, {_ => Float32(0.0)})
+        let crossSizes = Array<Float32>(count, {_ => Float32(0.0)})
+
+        let fixed = measureFixedChildren(ctx, inner, extents, crossSizes)
+        let gaps = gapTotal(gap, fixed.participating)
+        let remaining = max(0.0, mainExtent(inner) - fixed.mainTotal - gaps)
+        let flexTotal = measureFlexibleChildren(ctx, inner, gap, remaining, fixed, extents, crossSizes)
+        placeChildren(ctx, inner, gap, fixed.mainTotal + flexTotal + gaps, fixed.participating, extents, crossSizes)
+    }
+
+    /** Measures non-flexible children into the slot arrays; returns totals and weights. */
+    private func measureFixedChildren(
+        ctx: UiContext,
+        inner: Rect,
+        extents: Array<Float32>,
+        crossSizes: Array<Float32>
+    ): FixedPass {
+        var mainTotal: Float32 = 0.0
+        var weightTotal: Float32 = 0.0
+        var flexCount: Int64 = 0
+        var participating: Int64 = 0
+        for (i in 0..children.size) {
+            let child = children[i]
+            if (!child.participatesInLayout()) {
+                continue
+            }
+            participating += 1
+            if (child.isFlexible()) {
+                weightTotal += child.flexWeight()
+                flexCount += 1
+            } else {
+                let measured = child.measure(ctx, Size(inner.w, inner.h))
+                extents[i] = mainOf(measured)
+                crossSizes[i] = crossOf(measured)
+                mainTotal += extents[i]
+            }
+        }
+        FixedPass(mainTotal, weightTotal, flexCount, participating)
+    }
+
+    /** Distributes `remaining` main-axis space to flexible children; returns their total. */
+    private func measureFlexibleChildren(
+        ctx: UiContext,
+        inner: Rect,
+        gap: Float32,
+        remaining: Float32,
+        fixed: FixedPass,
+        extents: Array<Float32>,
+        crossSizes: Array<Float32>
+    ): Float32 {
+        let unit = flexUnit(remaining, fixed.weightTotal, fixed.flexCount, gap)
+        var flexTotal: Float32 = 0.0
+        for (i in 0..children.size) {
+            let child = children[i]
+            if (!child.participatesInLayout() || !child.isFlexible()) {
+                continue
+            }
+            extents[i] = flexExtent(child.flexWeight(), unit, gap)
+            let measured = child.measure(ctx, constrained(inner, extents[i]))
+            crossSizes[i] = crossOf(measured)
+            flexTotal += extents[i]
+        }
+        flexTotal
+    }
+
+    private func placeChildren(
+        ctx: UiContext,
+        inner: Rect,
+        gap: Float32,
+        childrenExtent: Float32,
+        participating: Int64,
+        extents: Array<Float32>,
+        crossSizes: Array<Float32>
+    ): Unit {
+        let plan = arrangementPlan(mainExtent(inner), childrenExtent, participating, gap)
+        var cursor = mainOrigin(inner) + plan[0]
+        for (i in 0..children.size) {
+            let child = children[i]
+            if (!child.participatesInLayout()) {
+                continue
+            }
+            let cross = crossPlacement(inner, crossSizes[i], child.acceptsStretch(crossAxis()))
+            child.layout(ctx, childRect(cursor, extents[i], cross[0], cross[1]))
+            cursor += extents[i] + plan[1]
         }
     }
 
@@ -68,51 +195,58 @@ class Stack <: Widget {
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
-        match (event) {
-            case UiEvent.Frame(_) => return broadcast(ctx, event)
-            case _ => ()
-        }
-        var i = children.size - 1
-        while (i >= 0) {
-            if (children[i].handle(ctx, event)) {
-                return true
-            }
-            i -= 1
-        }
-        false
+        dispatchChildren(children, ctx, event)
     }
 
     public func isFlexible(): Bool {
         flexible
     }
 
-    private func layoutVertical(ctx: UiContext, rect: Rect): Unit {
-        let fixed = fixedHeight(ctx, Size(rect.w, rect.h))
-        let unit = flexUnit(max(0.0, rect.h - fixed - spacingTotal()))
-        var y = rect.y
-        for (child in children) {
-            let h = if (child.isFlexible()) {
-                flexExtent(child, unit)
-            } else {
-                child.measure(ctx, Size(rect.w, rect.h)).h
-            }
-            child.layout(ctx, Rect(rect.x, y, rect.w, h))
-            y += h + spacing
+    /** Leading inset and per-gap step realising the configured main-axis alignment. */
+    private func arrangementPlan(
+        available: Float32,
+        childrenExtent: Float32,
+        count: Int64,
+        gap: Float32
+    ): Array<Float32> {
+        if (count == 0) {
+            return [0.0, gap]
+        }
+        let extra = max(0.0, available - childrenExtent)
+        match (mainAlignment) {
+            case MainAxisAlignment.Start => [0.0, gap]
+            case MainAxisAlignment.Center => [extra / 2.0, gap]
+            case MainAxisAlignment.End => [extra, gap]
+            case MainAxisAlignment.SpaceBetween =>
+                if (count > 1) {
+                    [0.0, gap + extra / Float32(count - 1)]
+                } else {
+                    [0.0, gap]
+                }
+            case MainAxisAlignment.SpaceAround =>
+                let distributed = extra / Float32(count)
+                [distributed / 2.0, gap + distributed]
+            case MainAxisAlignment.SpaceEvenly =>
+                let distributed = extra / Float32(count + 1)
+                [distributed, gap + distributed]
         }
     }
 
-    private func layoutHorizontal(ctx: UiContext, rect: Rect): Unit {
-        let fixed = fixedWidth(ctx, Size(rect.w, rect.h))
-        let unit = flexUnit(max(0.0, rect.w - fixed - spacingTotal()))
-        var x = rect.x
-        for (child in children) {
-            let w = if (child.isFlexible()) {
-                flexExtent(child, unit)
-            } else {
-                child.measure(ctx, Size(rect.w, rect.h)).w
-            }
-            child.layout(ctx, Rect(x, rect.y, w, rect.h))
-            x += w + spacing
+    /** Cross-axis origin and extent for one child. */
+    private func crossPlacement(inner: Rect, measured: Float32, canStretch: Bool): Array<Float32> {
+        let origin = crossOrigin(inner)
+        let available = crossExtent(inner)
+        let extent = min(available, measured)
+        match (crossAlignment) {
+            case CrossAxisAlignment.Stretch =>
+                if (canStretch) {
+                    [origin, available]
+                } else {
+                    [origin, extent]
+                }
+            case CrossAxisAlignment.Start => [origin, extent]
+            case CrossAxisAlignment.Center => [origin + max(0.0, available - extent) / 2.0, extent]
+            case CrossAxisAlignment.End => [origin + max(0.0, available - extent), extent]
         }
     }
 
@@ -122,59 +256,91 @@ class Stack <: Widget {
      * spans (see flexExtent), so those gaps are removed from the shared pool first —
      * that keeps a weight-2 cell exactly aligned with two single cells plus their gap.
      */
-    private func flexUnit(remaining: Float32): Float32 {
-        var weightTotal: Float32 = 0.0
-        var flexCount: Int64 = 0
-        for (child in children) {
-            if (child.isFlexible()) {
-                weightTotal += child.flexWeight()
-                flexCount += 1
-            }
-        }
+    private func flexUnit(remaining: Float32, weightTotal: Float32, flexCount: Int64, gap: Float32): Float32 {
         if (weightTotal <= 0.0) {
             return 0.0
         }
-        let absorbedGaps = spacing * (weightTotal - Float32(flexCount))
+        let absorbedGaps = gap * (weightTotal - Float32(flexCount))
         max(0.0, remaining - absorbedGaps) / weightTotal
     }
 
-    private func flexExtent(child: Widget, unit: Float32): Float32 {
-        let weight = child.flexWeight()
-        max(0.0, unit * weight + spacing * (weight - 1.0))
+    private func flexExtent(weight: Float32, unit: Float32, gap: Float32): Float32 {
+        max(0.0, unit * weight + gap * (weight - 1.0))
     }
 
-    private func spacingTotal(): Float32 {
-        if (children.size <= 1) {
+    private func resolvedGap(ctx: UiContext): Float32 {
+        max(0.0, ctx.resolve(spacing))
+    }
+
+    private func gapTotal(gap: Float32, count: Int64): Float32 {
+        if (count <= 1) {
             0.0
         } else {
-            Float32(children.size - 1) * spacing
+            Float32(count - 1) * gap
         }
     }
 
-    private func fixedHeight(ctx: UiContext, available: Size): Float32 {
-        var total: Float32 = 0.0
-        for (child in children) {
-            if (!child.isFlexible()) {
-                total += child.measure(ctx, available).h
-            }
+    private func mainOf(size: Size): Float32 {
+        match (axis) {
+            case Axis.Vertical => size.h
+            case Axis.Horizontal => size.w
         }
-        total
     }
 
-    private func fixedWidth(ctx: UiContext, available: Size): Float32 {
-        var total: Float32 = 0.0
-        for (child in children) {
-            if (!child.isFlexible()) {
-                total += child.measure(ctx, available).w
-            }
+    private func crossOf(size: Size): Float32 {
+        match (axis) {
+            case Axis.Vertical => size.w
+            case Axis.Horizontal => size.h
         }
-        total
     }
 
-    private func broadcast(ctx: UiContext, event: UiEvent): Bool {
-        for (child in children) {
-            let _ = child.handle(ctx, event)
+    private func mainExtent(rect: Rect): Float32 {
+        match (axis) {
+            case Axis.Vertical => rect.h
+            case Axis.Horizontal => rect.w
         }
-        false
+    }
+
+    private func crossExtent(rect: Rect): Float32 {
+        match (axis) {
+            case Axis.Vertical => rect.w
+            case Axis.Horizontal => rect.h
+        }
+    }
+
+    private func mainOrigin(rect: Rect): Float32 {
+        match (axis) {
+            case Axis.Vertical => rect.y
+            case Axis.Horizontal => rect.x
+        }
+    }
+
+    private func crossOrigin(rect: Rect): Float32 {
+        match (axis) {
+            case Axis.Vertical => rect.x
+            case Axis.Horizontal => rect.y
+        }
+    }
+
+    private func crossAxis(): Axis {
+        match (axis) {
+            case Axis.Vertical => Axis.Horizontal
+            case Axis.Horizontal => Axis.Vertical
+        }
+    }
+
+    /** The child's available box when its main-axis extent is already decided. */
+    private func constrained(inner: Rect, mainSize: Float32): Size {
+        match (axis) {
+            case Axis.Vertical => Size(inner.w, mainSize)
+            case Axis.Horizontal => Size(mainSize, inner.h)
+        }
+    }
+
+    private func childRect(mainPos: Float32, mainSize: Float32, crossPos: Float32, crossSize: Float32): Rect {
+        match (axis) {
+            case Axis.Vertical => Rect(crossPos, mainPos, crossSize, mainSize)
+            case Axis.Horizontal => Rect(mainPos, crossPos, mainSize, crossSize)
+        }
     }
 }

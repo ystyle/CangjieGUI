@@ -4,6 +4,8 @@ target/
 *.gcno
 *.cov
 .agents/
+.claude/
 .idea/
 .vscode/
 *.user
+cjpm.lock

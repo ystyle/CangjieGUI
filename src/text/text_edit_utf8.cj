@@ -78,12 +78,6 @@ internal func textCursorLineIndex(text: String, cursor: Int64): Int64 {
     line
 }
 
-internal func textCursorAtLineColumn(text: String, lineIndex: Int64, columnBytes: Int64): Int64 {
-    let lineStart = startOfTextLine(text, max(Int64(0), lineIndex))
-    let lineEnd = lineEndAfterOrAt(text, lineStart)
-    advanceTextCursorByBytes(text, lineStart, columnBytes, lineEnd)
-}
-
 internal func advanceTextCursorByBytes(
     text: String,
     start: Int64,
@@ -103,7 +97,7 @@ internal func advanceTextCursorByBytes(
     current
 }
 
-private func startOfTextLine(text: String, lineIndex: Int64): Int64 {
+internal func startOfTextLine(text: String, lineIndex: Int64): Int64 {
     var line: Int64 = 0
     var current: Int64 = 0
     while (line < lineIndex && current < text.size) {

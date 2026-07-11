@@ -1,14 +1,14 @@
 package cui.controls
 
 import sdl.{MouseButton, Rect, Size, UiEvent}
-import cui.core.{CUI_CONTROL_H, CUI_GAP, State, UiContext, Widget, buildChildren, drawSurface, emit}
+import cui.core.{Bindable, CUI_CONTROL_H, CUI_GAP, UiContext, Widget, buildChildren, drawSurface, emit}
 
 public class SegmentedControl <: Widget {
     private let items: Array<String>
-    private let selected: State<Int64>
+    private let selected: Bindable<Int64>
     private var frame = Rect.zero()
 
-    public init(items: Array<String>, selected: State<Int64>) {
+    public init(items: Array<String>, selected: Bindable<Int64>) {
         this.items = items
         this.selected = selected
         emit(this)
@@ -62,12 +62,12 @@ public class SegmentedControl <: Widget {
 
 public class TabView <: Widget {
     private let labels: Array<String>
-    private let selected: State<Int64>
+    private let selected: Bindable<Int64>
     private let pages: Array<Widget>
     private var frame = Rect.zero()
     private var laidOutPage: Int64 = -1
 
-    public init(labels: Array<String>, selected: State<Int64>, body!: () -> Unit) {
+    public init(labels: Array<String>, selected: Bindable<Int64>, body!: () -> Unit) {
         this.labels = labels
         this.selected = selected
         this.pages = buildChildren(body)

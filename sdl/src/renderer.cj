@@ -1,5 +1,6 @@
 package sdl
 
+import std.collection.ArrayList
 import sdl.text.{NativeTextColor, NativeTextException, NativeTextMetrics, NativeTextRenderer}
 
 /**
@@ -30,6 +31,7 @@ public class Renderer {
     private var ssEnabled: Bool
     private let geometry = GeometryBatch()
     private let textBackend: ?NativeTextRenderer
+    private let clipStack = ArrayList<Rect>()
 
     internal init(ptr: CPointer<Unit>, contentScale!: Float32 = 1.0) {
         this.ptr = ptr
@@ -52,6 +54,9 @@ public class Renderer {
      * it draws straight to the window. Either way the target is cleared to `clearColor`.
      */
     public func beginScene(logicalWidth: Float32, logicalHeight: Float32, clearColor: Color): Unit {
+        // Balanced pushClip/popClip pairs leave the stack empty between frames; clearing
+        // here keeps one leaked push from clipping every later frame.
+        clipStack.clear()
         if (ptr.isNull()) {
             return
         }
@@ -200,12 +205,52 @@ public class Renderer {
         rectFromSdl(raw)
     }
 
-    public func setClip(rect: Rect): Unit {
+    /**
+     * Narrows the active clip to the intersection of `rect` and the current clip, so nested
+     * scrollports and fields clip within their ancestors. Pair every call with `popClip`.
+     */
+    public func pushClip(rect: Rect): Unit {
+        let effective = match (currentClip()) {
+            case Some(top) => top.intersection(rect)
+            case None => rect
+        }
+        clipStack.add(effective)
+        applyClip()
+    }
+
+    /** Restores the clip that was active before the matching `pushClip`. */
+    public func popClip(): Unit {
+        if (!clipStack.isEmpty()) {
+            clipStack.remove(at: clipStack.size - 1)
+        }
+        applyClip()
+    }
+
+    /** The clip in effect right now, or `None` when drawing is unclipped. */
+    public func currentClip(): ?Rect {
+        if (clipStack.isEmpty()) {
+            None
+        } else {
+            Some(clipStack[clipStack.size - 1])
+        }
+    }
+
+    private func applyClip(): Unit {
+        if (ptr.isNull()) {
+            return
+        }
+        match (currentClip()) {
+            case Some(rect) => setClip(rect)
+            case None => resetClip()
+        }
+    }
+
+    private func setClip(rect: Rect): Unit {
         var raw = rect.toSdlRect()
         ensureSdl(unsafe { SDL_SetRenderClipRect(ptr, inout raw) }, "SDL_SetRenderClipRect")
     }
 
-    public func resetClip(): Unit {
+    private func resetClip(): Unit {
         ensureSdl(unsafe { SDL_SetRenderClipRect(ptr, CPointer<SdlRect>()) }, "SDL_SetRenderClipRect")
     }
 

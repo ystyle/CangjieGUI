@@ -1,14 +1,6 @@
 package cui.core
 
-import sdl.{Color, FrameInfo, Renderer, SurfaceStyle}
-
-public class State<T> {
-    public var value: T
-
-    public init(value: T) {
-        this.value = value
-    }
-}
+import sdl.{Color, FrameInfo, Insets, Renderer, SurfaceStyle}
 
 public struct Theme {
     public let bg: Color
@@ -193,16 +185,42 @@ public class UiContext {
     public let theme: Theme
     public var focusId: String = ""
     public var dragId: String = ""
+    public var pressedId: String = ""
     public var mouseX: Float32 = 0.0
     public var mouseY: Float32 = 0.0
     public var leftMouseDown: Bool = false
     public var shouldClose: Bool = false
     public var frame: FrameInfo = FrameInfo(UInt64(0), UInt64(0))
+    /** Physical pixels per virtual pixel; set from the window content scale. */
+    public var displayScale: Float32 = 1.0
+    /** User font scale applied to `fp` lengths; `1.0` keeps `fp` equal to `vp`. */
+    public var fontScale: Float32 = 1.0
 
     public init(renderer: Renderer, theme: Theme) {
         this.renderer = renderer
         this.theme = theme
     }
+
+    /** Converts a unit-carrying length into logical (virtual) pixels. */
+    public func resolve(length: Length): Float32 {
+        match (length.unit) {
+            case LengthUnit.Vp => length.value
+            case LengthUnit.Px => length.value / max(0.001, displayScale)
+            case LengthUnit.Fp => length.value * fontScale
+        }
+    }
+
+    /** Converts unit-carrying edge insets into logical-pixel insets. */
+    public func resolve(insets: LengthInsets): Insets {
+        Insets(
+            max(0.0, resolve(insets.top)),
+            max(0.0, resolve(insets.right)),
+            max(0.0, resolve(insets.bottom)),
+            max(0.0, resolve(insets.left))
+        )
+    }
+
+    private var focusClaimedInPress = false
 
     public func requestClose(): Unit {
         shouldClose = true
@@ -214,6 +232,27 @@ public class UiContext {
 
     public func focus(id: String): Unit {
         focusId = id
+        focusClaimedInPress = true
+    }
+
+    /** Removes keyboard focus from every control. */
+    public func clearFocus(): Unit {
+        focusId = ""
+    }
+
+    /*
+     * Desktop-standard blur: a primary press either moves focus to the control that
+     * claims it, or clears focus entirely. The shell brackets each MouseDown dispatch
+     * with these two calls; any `focus()` during dispatch counts as a claim.
+     */
+    protected func beginPointerPress(): Unit {
+        focusClaimedInPress = false
+    }
+
+    protected func settleFocusAfterPress(): Unit {
+        if (!focusClaimedInPress) {
+            clearFocus()
+        }
     }
 
     public func beginDrag(id: String): Unit {
@@ -226,5 +265,20 @@ public class UiContext {
 
     public func clearDrag(): Unit {
         dragId = ""
+    }
+
+    /** Marks a control as pressed until the primary pointer is released. */
+    public func press(id: String): Unit {
+        pressedId = id
+    }
+
+    /** Returns whether `id` owns the active primary-pointer press. */
+    public func isPressed(id: String): Bool {
+        pressedId == id
+    }
+
+    /** Clears the active primary-pointer press. */
+    public func clearPress(): Unit {
+        pressedId = ""
     }
 }

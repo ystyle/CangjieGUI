@@ -34,6 +34,25 @@ func insetsShrinkWithoutNegativeSize(): Unit {
 }
 
 @Test
+func rectIntersectionCoversOverlapContainmentAndDisjoint(): Unit {
+    let base = Rect(0.0, 0.0, 100.0, 60.0)
+
+    let overlap = base.intersection(Rect(40.0, 20.0, 100.0, 100.0))
+    @Expect(overlap.x, Float32(40.0))
+    @Expect(overlap.y, Float32(20.0))
+    @Expect(overlap.w, Float32(60.0))
+    @Expect(overlap.h, Float32(40.0))
+
+    let contained = base.intersection(Rect(10.0, 10.0, 20.0, 20.0))
+    @Expect(contained.x, Float32(10.0))
+    @Expect(contained.w, Float32(20.0))
+
+    let disjoint = base.intersection(Rect(200.0, 200.0, 10.0, 10.0))
+    @Expect(disjoint.w, Float32(0.0))
+    @Expect(disjoint.h, Float32(0.0))
+}
+
+@Test
 func clampF32HonorsBounds(): Unit {
     @Expect(clampF32(-3.0, 0.0, 2.0), Float32(0.0))
     @Expect(clampF32(1.5, 0.0, 2.0), Float32(1.5))

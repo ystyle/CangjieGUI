@@ -1,7 +1,7 @@
 package cui.media
 
 import sdl.{Rect, Renderer, Size, Texture, TextureBlendMode, UiEvent}
-import cui.core.{UiContext, Widget, emit}
+import cui.core.{Length, LengthUnit, UiContext, Widget, emit}
 
 public enum ImageFit {
     | Stretch
@@ -11,9 +11,9 @@ public enum ImageFit {
 
 public class ImageView <: Widget & Resource {
     private let path: String
-    private let fit: ImageFit
-    private let preferredWidth: ?Float32
-    private let preferredHeight: Float32
+    private var imageFit: ImageFit
+    private let preferredWidth: ?Length
+    private let preferredHeight: Length
     private var frame = Rect.zero()
     private var texture: ?Texture = None
     private var closed = false
@@ -21,24 +21,30 @@ public class ImageView <: Widget & Resource {
     public init(
         path: String,
         fit!: ImageFit = ImageFit.Contain,
-        preferredWidth!: ?Float32 = None,
-        preferredHeight!: Float32 = 96.0
+        preferredWidth!: ?Length = None,
+        preferredHeight!: Length = Length(96.0, LengthUnit.Vp)
     ) {
         this.path = path
-        this.fit = fit
+        this.imageFit = fit
         this.preferredWidth = preferredWidth
         this.preferredHeight = preferredHeight
         emit(this)
     }
 
+    /** Selects how image pixels are fitted into the assigned frame. */
+    public func fit(value: ImageFit): ImageView {
+        imageFit = value
+        this
+    }
+
     // Without a preferred width an image fills the space it is offered (a full-width block);
     // with one it hugs that box, which is what lets it sit inline beside other controls.
-    public func measure(_: UiContext, available: Size): Size {
+    public func measure(ctx: UiContext, available: Size): Size {
         let width = match (preferredWidth) {
-            case Some(value) => min(available.w, value)
+            case Some(value) => min(available.w, max(0.0, ctx.resolve(value)))
             case None => available.w
         }
-        Size(width, min(available.h, preferredHeight))
+        Size(width, min(available.h, max(0.0, ctx.resolve(preferredHeight))))
     }
 
     public func layout(_: UiContext, rect: Rect): Unit {
@@ -50,12 +56,12 @@ public class ImageView <: Widget & Resource {
             return
         }
         let image = textureFor(ctx.renderer)
-        let destination = fittedRect(Size(image.width, image.height), frame, fit)
-        match (fit) {
+        let destination = fittedRect(Size(image.width, image.height), frame, imageFit)
+        match (imageFit) {
             case ImageFit.Cover =>
-                ctx.renderer.setClip(frame)
+                ctx.renderer.pushClip(frame)
                 ctx.renderer.texture(image, destination)
-                ctx.renderer.resetClip()
+                ctx.renderer.popClip()
             case _ => ctx.renderer.texture(image, destination)
         }
     }

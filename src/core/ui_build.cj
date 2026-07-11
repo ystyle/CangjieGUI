@@ -28,6 +28,7 @@ import std.collection.ArrayList
  * block balances its push and pop through `buildChildren`.
  */
 var openBlocks = ArrayList<ArrayList<Widget>>()
+var activeStateStore: ?StateStore = None
 
 /*
  * Register a freshly constructed widget with the enclosing builder block. Every widget
@@ -38,6 +39,34 @@ var openBlocks = ArrayList<ArrayList<Widget>>()
 public func emit(widget: Widget): Unit {
     if (!openBlocks.isEmpty()) {
         openBlocks[openBlocks.size - 1].add(widget)
+    }
+}
+
+/*
+ * A modifier is evaluated immediately after the expression that emitted its child. Find
+ * that exact child in the active block and replace it with the decorated node. Searching
+ * backwards also keeps modifiers safe when a stored widget is decorated after another
+ * declaration in the same block.
+ */
+protected func replaceLastEmission(original: Widget, replacement: Widget): Unit {
+    if (openBlocks.isEmpty()) {
+        return
+    }
+    let block = openBlocks[openBlocks.size - 1]
+    var i = block.size - 1
+    while (i >= 0) {
+        if (let Some(candidate) <- (block[i] as Object)) {
+            if (let Some(source) <- (original as Object)) {
+                if (refEq(candidate, source)) {
+                    block[i] = replacement
+                    return
+                }
+            }
+        }
+        i -= 1
+    }
+    if (!block.isEmpty()) {
+        block[block.size - 1] = replacement
     }
 }
 
@@ -65,6 +94,68 @@ protected func buildChild(body: () -> Unit): Widget {
         case 0 => EmptyView()
         case 1 => children[0]
         case _ => Stack(Axis.Vertical, children)
+    }
+}
+
+/** Builds an application root while retaining and pruning its keyed local state. */
+protected func buildRoot(body: () -> Unit, stateStore: StateStore): Widget {
+    let previous = activeStateStore
+    activeStateStore = Some(stateStore)
+    stateStore.beginBuild()
+    try {
+        try {
+            let root = buildChild(body)
+            stateStore.finishBuild()
+            root
+        } catch (error: Exception) {
+            stateStore.cancelBuild()
+            throw error
+        }
+    } finally {
+        activeStateStore = previous
+    }
+}
+
+/** Builds one identity scope without changing the normal widget collection rules. */
+protected func buildKeyedChild(key: String, body: () -> Unit): Widget {
+    match (activeStateStore) {
+        case Some(store) =>
+            store.pushScope(key)
+            try {
+                buildChild(body)
+            } finally {
+                store.popScope()
+            }
+        case None => buildChild(body)
+    }
+}
+
+/** Throws `IllegalStateException` when no application root is being built. */
+protected func currentStateStore(): StateStore {
+    match (activeStateStore) {
+        case Some(store) => store
+        case None => throw IllegalStateException("rememberState must be called while building a DesktopApp view")
+    }
+}
+
+/** Retains implicit control state when building an app and falls back for headless use. */
+protected func localState<T>(key: String, initial: () -> T): State<T> {
+    match (activeStateStore) {
+        case Some(store) => store.remember<T>(key, initial)
+        case None => State<T>(initial())
+    }
+}
+
+/*
+ * A focus/press identity for a control that declared no explicit id. During a build the
+ * identity is scoped by `Keyed` and deduplicated in declaration order, so identical
+ * default names (two icon-only buttons, two "确定" buttons) never share interaction
+ * state. Outside a build the base name is returned unchanged.
+ */
+protected func controlIdentity(base: String): String {
+    match (activeStateStore) {
+        case Some(store) => store.uniqueControlId(base)
+        case None => base
     }
 }
 

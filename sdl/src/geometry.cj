@@ -169,6 +169,13 @@ public struct Rect {
         px >= x && px <= right() && py >= y && py <= bottom()
     }
 
+    /** The overlap of two rectangles; degenerates to a zero-area rect when they are disjoint. */
+    public func intersection(other: Rect): Rect {
+        let nx = max(x, other.x)
+        let ny = max(y, other.y)
+        Rect(nx, ny, max(0.0, min(right(), other.right()) - nx), max(0.0, min(bottom(), other.bottom()) - ny))
+    }
+
     internal func toSdlFRect(): SdlFRect {
         var raw = SdlFRect()
         raw.x = x

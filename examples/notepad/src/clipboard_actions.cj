@@ -1,16 +1,17 @@
+/*
+ * 剪贴板动作：整篇复制与光标处粘贴。
+ * 系统剪贴板可能不可用（如无桌面环境），失败时只更新状态栏提示，不中断应用。
+ */
 package cui_notepad
 
-import cui.Clipboard
-import cui.CuiException
-import cui.State
-import cui.TextEditState
+import cui.{Clipboard, CuiException, State, TextEditState}
 
 func copyAll(body: State<String>, status: State<String>): Unit {
     try {
         Clipboard.setText(body.value)
-        status.value = "Copied buffer"
+        status.value = "已复制到剪贴板"
     } catch (e: CuiException) {
-        status.value = "Copy unavailable"
+        status.value = "无法访问剪贴板"
     }
 }
 
@@ -18,12 +19,13 @@ func pasteClipboard(body: State<String>, cursor: State<Int64>, status: State<Str
     try {
         let text = Clipboard.getText()
         if (text.size <= 0) {
-            status.value = "Clipboard is empty"
+            status.value = "剪贴板为空"
             return
         }
+        // 经 TextEditState 在光标处插入，粘贴后光标自动落到插入内容末尾。
         TextEditState(body, cursor: Some(cursor)).insert(text)
-        status.value = "Pasted clipboard"
+        status.value = "已粘贴剪贴板内容"
     } catch (e: CuiException) {
-        status.value = "Paste unavailable"
+        status.value = "无法读取剪贴板"
     }
 }

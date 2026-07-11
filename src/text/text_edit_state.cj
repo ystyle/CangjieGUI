@@ -1,15 +1,15 @@
 package cui.text
 
-import cui.core.State
+import cui.core.{Bindable, State}
 
 /**
  * Shared text-editing model for cursor-aware text fields and text areas.
  */
 public class TextEditState {
-    public let text: State<String>
+    public let text: Bindable<String>
     public let cursor: State<Int64>
 
-    public init(text: State<String>, cursor!: ?State<Int64> = None) {
+    public init(text: Bindable<String>, cursor!: ?State<Int64> = None) {
         this.text = text
         this.cursor = match (cursor) {
             case Some(value) => value

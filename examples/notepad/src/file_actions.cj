@@ -1,51 +1,51 @@
+/*
+ * 文件动作：新建、保存与载入。
+ *
+ * “新建”不再弹系统 MessageBox 确认——同步弹窗会阻塞事件循环，
+ * 与打开/保存对话框“发起请求 -> 帧内轮询”的异步模式自相矛盾。
+ * 改为置起 confirmingNew 状态，由视图层的应用内确认条完成交互。
+ */
 package cui_notepad
 
 import std.fs.File
 import std.fs.Path
-import cui.CuiException
-import cui.FileSystem
-import cui.FileSystemEntryType
-import cui.MessageBoxButton
-import cui.MessageBoxButtonOrder
-import cui.MessageBoxKind
-import cui.MessageBoxOptions
-import cui.State
-import cui.showMessageBox
+import cui.{FileSystem, FileSystemEntryType}
 
+// “新建”入口：缓冲区已有内容时只亮出确认条，把决定权留给用户；为空则直接重置。
 func newFile(model: NotepadModel): Unit {
-    if (model.body.value.size > 0 && !confirmNewFile(model.status)) {
+    if (model.body.value.size > 0) {
+        model.confirmingNew.value = true
         return
     }
+    resetBuffer(model)
+}
+
+// 确认条的“丢弃并新建”：先收起确认条，再清空缓冲区。
+func confirmDiscardAndNew(model: NotepadModel): Unit {
+    model.confirmingNew.value = false
+    resetBuffer(model)
+}
+
+// 确认条的“取消”：只收起确认条，文档内容保持原样。
+func cancelNewFile(model: NotepadModel): Unit {
+    model.confirmingNew.value = false
+}
+
+private func resetBuffer(model: NotepadModel): Unit {
     model.body.value = ""
     model.bodyCursor.value = 0
     model.currentPath.value = ""
-    model.status.value = "New buffer"
-}
-
-func confirmNewFile(status: State<String>): Bool {
-    var options = MessageBoxOptions("Discard current note?", "The current buffer has text. Start a new note?")
-    options.kind = MessageBoxKind.Warning
-    options.buttonOrder = MessageBoxButtonOrder.LeftToRight
-    options.buttons = [
-        MessageBoxButton("Start New", id: 1, returnKeyDefault: true),
-        MessageBoxButton("Cancel", id: 0, escapeKeyDefault: true)
-    ]
-
-    try {
-        showMessageBox(options) == 1
-    } catch (e: CuiException) {
-        status.value = "Confirmation unavailable"
-        false
-    }
+    model.status.value = "已新建空白文档"
 }
 
 func saveCurrentFile(model: NotepadModel, fallbackPath: String): Unit {
+    // 尚未打开过文件时保存到应用偏好目录的默认路径，避免每次保存都弹对话框。
     let target = if (model.currentPath.value.size > 0) {
         model.currentPath.value
     } else {
         fallbackPath
     }
-    saveFileToPath(model, target, "Saved file")
+    saveFileToPath(model, target, "文件已保存")
 }
 
 func saveFileToPath(model: NotepadModel, path: String, message: String): Unit {
@@ -54,16 +54,17 @@ func saveFileToPath(model: NotepadModel, path: String, message: String): Unit {
         model.currentPath.value = path
         model.status.value = message
     } catch (e: Exception) {
-        model.status.value = "Could not save file"
+        model.status.value = "无法保存文件"
     }
 }
 
 func loadDroppedFile(model: NotepadModel, path: String): Unit {
+    // 拖入的可能是目录或已被移走的文件，先确认是普通文件再读取。
     if (!fileExists(path)) {
-        model.status.value = "Dropped file does not exist"
+        model.status.value = "拖入的文件不存在"
         return
     }
-    loadFile(model, path, "Loaded dropped file")
+    loadFile(model, path, "已载入拖入的文件")
 }
 
 func loadFile(model: NotepadModel, path: String, message: String): Unit {
@@ -73,7 +74,7 @@ func loadFile(model: NotepadModel, path: String, message: String): Unit {
         model.currentPath.value = path
         model.status.value = message
     } catch (e: Exception) {
-        model.status.value = "Could not read file"
+        model.status.value = "无法读取文件"
     }
 }
 

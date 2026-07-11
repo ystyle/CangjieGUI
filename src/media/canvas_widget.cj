@@ -5,13 +5,19 @@ import cui.core.{UiContext, Widget, drawSurface, emit}
 
 public class CanvasWidget <: Widget {
     private let onDraw: (Renderer, Rect) -> Unit
-    private let onEvent: (UiEvent, Rect) -> Bool
+    private var eventHandler: (UiEvent, Rect) -> Bool
     private var frame = Rect.zero()
 
     public init(onDraw: (Renderer, Rect) -> Unit, onEvent!: (UiEvent, Rect) -> Bool = {_, _ => false}) {
         this.onDraw = onDraw
-        this.onEvent = onEvent
+        this.eventHandler = onEvent
         emit(this)
+    }
+
+    /** Sets the event callback, which receives the current canvas frame. */
+    public func onEvent(value: (UiEvent, Rect) -> Bool): CanvasWidget {
+        eventHandler = value
+        this
     }
 
     public func measure(_: UiContext, available: Size): Size {
@@ -24,13 +30,13 @@ public class CanvasWidget <: Widget {
 
     public func draw(ctx: UiContext): Unit {
         drawSurface(ctx, frame, ctx.theme.fieldSurface(false))
-        ctx.renderer.setClip(frame.inset(1.0))
+        ctx.renderer.pushClip(frame.inset(1.0))
         onDraw(ctx.renderer, frame)
-        ctx.renderer.resetClip()
+        ctx.renderer.popClip()
     }
 
     public func handle(_: UiContext, event: UiEvent): Bool {
-        onEvent(event, frame)
+        eventHandler(event, frame)
     }
 
     public func isFlexible(): Bool {

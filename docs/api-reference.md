@@ -1,186 +1,208 @@
 # CUI API 参考
 
-本文档描述由 `cui` 根包重新导出的 GUI API。几何、窗口、渲染器、输入、对话框和系统 API 同样可
-通过 `cui` 使用，但其完整定义统一记录在 [SDL API 参考](../sdl/docs/api-reference.md)。
+本文记录 `cui` 根包重新导出的 GUI API。几何、渲染、窗口、事件、对话框、输入和系统能力见
+[SDL API 参考](../sdl/docs/api-reference.md)。
 
-## 导入约定
+## 1. 尺寸单位
 
-推荐显式导入所需成员：
-
-```cangjie
-import cui.{Button, DesktopApp, Insets, Label, State, VStack, WindowSpec}
-```
-
-## 核心协议与状态
-
-### `Widget`
-
-所有控件的行为协议：
-
-| 方法 | 说明 |
+| 类型/API | 说明 |
 |---|---|
-| `measure(ctx, available): Size` | 在可用空间内计算期望尺寸 |
-| `layout(ctx, rect): Unit` | 接收最终布局矩形 |
-| `draw(ctx): Unit` | 使用上下文渲染器绘制 |
-| `handle(ctx, event): Bool` | 处理事件；返回是否消费 |
-| `isFlexible(): Bool` | 是否参与剩余空间分配，默认 `false` |
-| `flexWeight(): Float32` | 弹性空间权重，默认 `1.0` |
+| `LengthUnit` | `Px`（物理像素）、`Vp`（虚拟像素）、`Fp`（字体像素）；`symbol()` 返回后缀名 |
+| `Length` | 值 + 单位；`Length(value, unit)`、`Length.zero()`、`* Float32`、`/ Float32`、`toString` |
+| `LengthUnits` | 字面量后缀接口：导入后 `Int64`/`Float64` 获得 `.px`、`.vp`、`.fp` 属性 |
+| `LengthInsets` | 四边长度：`(all)`、`(horizontal, vertical)`、`(top:, right:, bottom:, left:)`、`zero()`、`of(Insets)` |
 
-### `State<T>`
+解析规则（`UiContext.resolve`）：`vp` 原值；`px` 除以 `displayScale`；`fp` 乘以 `fontScale`。
+所有接受 `Length` 的修饰器同时提供 `Float32` 重载：尺寸按 `vp` 解释，字号按 `fp` 解释。
 
-`State(value)` 创建跨帧状态，公开可变成员为 `value: T`。
+## 2. `Widget`
 
-### `UiContext`
+自定义控件实现以下协议：
 
-提供 `renderer`、`theme`、焦点 ID、拖动 ID、鼠标状态、关闭标志和当前 `FrameInfo`。主要方法：
-`requestClose`、`hasFocus`、`focus`、`beginDrag`、`isDragging`、`clearDrag`。
+| 方法 | 默认值/说明 |
+|---|---|
+| `measure(ctx, available): Size` | 在父级可用空间内返回期望尺寸 |
+| `layout(ctx, rect): Unit` | 接收父级确定的最终矩形 |
+| `draw(ctx): Unit` | 使用 `UiContext.renderer` 绘制 |
+| `handle(ctx, event): Bool` | 返回事件是否已消费 |
+| `isFlexible(): Bool` | 默认 `false` |
+| `flexWeight(): Float32` | 默认 `1.0` |
+| `acceptsStretch(axis): Bool` | 默认 `true`；显式最大/固定尺寸修饰器会拒绝对应轴拉伸 |
+| `participatesInLayout(): Bool` | 默认 `true`；`visible(false)` 返回 `false` |
 
-### 基础枚举
+通用链式修饰器均返回 `Widget`（尺寸参数为 `Length`，另有按 vp 解释的 `Float32` 重载）：
 
-- `Axis`：`Horizontal`、`Vertical`。
-- `ButtonRole`：`Normal`、`Primary`、`Danger`。
-- `TextAlign`：`Leading`、`Center`、`Trailing`。
+| 分类 | API |
+|---|---|
+| 固定/边界尺寸 | `width`、`height`、`minWidth`、`maxWidth`、`minHeight`、`maxHeight` |
+| 填充 | `fillWidth()`、`fillHeight()` |
+| 间距 | `padding(all)`、`padding(horizontal, vertical)`、`padding(left, top, right, bottom)` |
+| 表面 | `background(color)`、`background(color, radius)`、`surface(style)` |
+| 弹性 | `flex()`、`flex(weight)` |
+| 条件 | `visible(isVisible)`、`enabled(isEnabled)` |
 
-## 主题
+`emit(widget)` 把已有实例登记到当前构建块；块外调用不产生登记行为。
 
-### `Theme`
+## 3. 状态与身份
 
-包含 `bg`、`panel`、`panelEdge`、`text`、`mutedText`、`accent`、`accentText`、`danger`、
-`field`、`fieldActive`、`panelRaised`、`accentSoft`、`shadow`、各级圆角和边框宽度。
+### 可观察接口
+
+| 接口 | 成员 |
+|---|---|
+| `Observable<T>` | `get(): T`、`revision: UInt64`、`observe((T, T) -> Unit): StateObservation<T>`、`map<U>(transform): DerivedState<U>` |
+| `Bindable<T> <: Observable<T>` | `value: T`（可读写属性）、`project<U>(get:, set:): Binding<U>` |
+
+### `State<T>`（实现 `Bindable<T>`）
 
 | API | 说明 |
 |---|---|
-| `Theme.light(): Theme` | 默认浅色主题 |
-| `Theme.dark(): Theme` | 默认深色主题 |
-| `panelSurface()` | 普通面板样式 |
-| `raisedSurface()` | 浮起面板样式 |
-| `fieldSurface(active)` | 普通或激活输入区域样式 |
-| `buttonSurface(role)` | 按按钮角色生成样式 |
-| `selectedSurface()` | 已选中项目样式 |
+| `State(value)` | 创建状态 |
+| `value: T` | 可读写属性；每次写入增加修订号并同步通知观察者 |
+| `revision: UInt64` | 只读修订号，极端溢出时回绕为 0 |
+| `update((T) -> T)` | 函数式更新 |
+| `observe((T, T) -> Unit): StateObservation<T>` | 观察后续写入；参数为旧值、新值 |
+| `setIfChanged(next): Bool` | 仅 `T <: Equatable<T>`；值不同才赋值，返回是否触发通知 |
 
-## 布局与容器
+`StateObservation<T>` 实现 `Resource`，提供 `isClosed`、`close`。
 
-| 类型 | 构造参数 | 说明 |
-|---|---|---|
-| `VStack` | `spacing=8`、`padding=0`、`flexible=true`、`body` | 纵向排列构建块中的子项 |
-| `HStack` | 同上 | 横向排列构建块中的子项 |
-| `Flexible` | `weight=1`、`body` | 按权重占用父栈剩余空间 |
-| `Panel` | `padding=12`、`style=None`、`flexible=true`、`body` | 带表面和内边距的容器 |
-| `Spacer` | 无 | 弹性空白区域 |
+### 派生与绑定
 
-`emit(widget)` 将已有 Widget 实例登记到当前构建块；不在构建块中调用时不产生效果。
-
-## 基础控件
-
-### `Label`
-
-```cangjie
-Label(text, muted: false, align: TextAlign.Leading, color: None, fontSize: FontSizes.BODY)
-```
-
-### `Button`
-
-```cangjie
-Button(title, onClick, role: ButtonRole.Normal, style: None, fontSize: FontSizes.CONTROL)
-```
-
-### 图标与分隔线
-
-| 类型 | 构造参数 |
+| API | 说明 |
 |---|---|
-| `Icon` | `icon`、`size=20`、`color=None` |
-| `IconButton` | `icon`、`label=None`、`role=Normal`、`style=None`、`onClick` |
-| `Divider` | `axis=Horizontal`、`color=None` |
+| `derive(a, compute)` / `derive(a, b, compute)` / `derive(a, b, c, compute)` | 从一至三个 `Observable` 计算 `DerivedState<T>` |
+| `DerivedState<T>` | 只读、带缓存：仅当来源 `revision` 变化时重新计算；实现 `Observable<T>`，另有 `value` 属性 |
+| `Binding<T>` | `project` 产物；实现 `Bindable<T>`，读写均委托给源状态 |
 
-`IconName` 的完整图标集合见 [SDL API 参考](../sdl/docs/api-reference.md#图标与版本)。
+### 局部状态
 
-## 事件包装器
+| API | 说明 |
+|---|---|
+| `rememberState<T>(key, initial): State<T>` | 在当前构建与身份 scope 中保留状态 |
+| `Keyed(key) { ... }` | 为子树建立稳定命名空间 |
+| `ForEach(items, key: (T) -> String) { item => ... }` | 每个条目一个 `Keyed` 子树，身份跟随业务键 |
+| `ForEachIndexed(items) { index, item => ... }` | 按位置命名的变体，仅适用于不重排的集合 |
+| `StateStore.remember` | 显式状态存储访问；重复 key 或 key 换型抛 `IllegalStateException` |
+| `StateStore.clear` | 清空全部保留状态 |
 
-| 类型 | 构造参数 | 行为 |
+`rememberState` 仅能在 `DesktopApp` 根视图构建或框架测试构建中使用；块外调用抛
+`IllegalStateException`。空 key 抛 `IllegalArgumentException`。
+
+控件的交互身份（焦点、按压）默认在每次构建中按声明顺序自动唯一化，并受 `Keyed` 命名空间
+隔离；`.id(...)` 仅在身份需要跨树形变化保持时使用。
+
+## 4. 上下文与枚举
+
+`UiContext` 公开渲染器、主题、焦点/拖动/按压 ID、鼠标状态、关闭标志、`FrameInfo`，以及
+`displayScale`、`fontScale` 两个缩放因子。方法包括：`requestClose`、`hasFocus`、`focus`、
+`clearFocus`、`beginDrag`、`isDragging`、`clearDrag`、`press`、`isPressed`、`clearPress`、
+`resolve(Length): Float32`、`resolve(LengthInsets): Insets`。
+
+焦点遵循“按下即结算”：一次主键按下后，若没有控件调用 `focus` 认领焦点，当前焦点被清除
+（点击空白使文本框失焦）。该结算由 `DesktopApp` 在每次 MouseDown 分发后执行。
+
+| 枚举 | 成员 |
+|---|---|
+| `Axis` | `Horizontal`、`Vertical` |
+| `ButtonRole` | `Normal`、`Primary`、`Danger` |
+| `TextAlign` | `Leading`、`Center`、`Trailing` |
+| `MainAxisAlignment` | `Start`、`Center`、`End`、`SpaceBetween`、`SpaceAround`、`SpaceEvenly` |
+| `CrossAxisAlignment` | `Start`、`Center`、`End`、`Stretch` |
+| `Alignment` | 九宫格方向：`TopLeading` 至 `BottomTrailing` |
+| `LengthUnit` | `Px`、`Vp`、`Fp` |
+
+## 5. 主题
+
+`Theme` 包含背景、面板、边框、主/次文字、强调、危险、输入区域、阴影与圆角。常用方法：
+
+- `Theme.light()`、`Theme.dark()`。
+- `panelSurface()`、`raisedSurface()`。
+- `fieldSurface(active)`、`buttonSurface(role)`、`selectedSurface()`。
+
+## 6. 布局与容器
+
+| 类型 | 必要构造信息 | 链式 API/行为 |
 |---|---|---|
-| `EventHandler` | `onEvent: (UiEvent) -> Bool`、`body` | 在子树处理前截获事件 |
-| `FrameHandler` | `onFrame: (FrameInfo) -> Unit`、`body` | 每帧执行回调 |
+| `VStack` | `body`（可选 `spacing: Length`、`padding: LengthInsets`） | `spacing`、`mainAxisAlignment`、`crossAxisAlignment`、`flexible` |
+| `HStack` | 同上 | 同上 |
+| `ZStack` | `body` | `alignment`；后声明的子项绘制在上层 |
+| `Grid` | `columns`、`body` | `spacing(all)`、`spacing(horizontal, vertical)`；列数小于 1 抛异常 |
+| `FlowRow` | `body` | `spacing`；空间不足自动换行 |
+| `ScrollView` | `id`、`body` | 垂直滚动；`scrollState` 接管偏移；溢出时为滚动条预留轨道，不遮挡内容 |
+| `Panel` | `body`（可选 `padding: LengthInsets`） | `contentPadding`、`style`、`flexible` |
+| `Flexible` | `body` | 兼容的权重包装容器，新代码可用 `.flex` |
+| `Spacer` | 无 | 弹性空白 |
 
-二者均把构建块包装成单个 Widget，并继承子项的弹性行为。
+## 7. 基础控件
 
-## 控件包 `cui.controls`
-
-| 类型 | 构造函数 | 状态/行为 |
+| 类型 | 必要构造信息 | 链式 API |
 |---|---|---|
-| `Checkbox` | `Checkbox(label, checked: State<Bool>)` | 点击切换布尔状态 |
-| `ListView` | `ListView(items, selected, scroll: ?State<Float32> = None)` | 可滚动列表和选中索引 |
+| `Label` | `text` | `muted()`、`muted(bool)`、`textAlign`、`foregroundColor`、`fontSize`、`maxLines(n)`、`wrap()` |
+| `Button` | `title`、`onClick` | `id`、`role`、`style`、`fontSize` |
+| `Icon` | `IconName` | `iconSize`、`foregroundColor` |
+| `IconButton` | `IconName`、`onClick` | `id`、`label`、`role`、`style` |
+| `Divider` | 无 | `axis`、`color` |
+
+单行 `Label` 超宽时自动省略号截断；`maxLines(n)` 换行至 n 行（末行截断），`wrap()` 不限行数，
+`maxLines` 参数必须大于 0。Button 与 IconButton 在鼠标释放时激活，支持取得焦点后的
+Enter/Space，悬停与按压有主题化的视觉反馈。
+
+## 8. 选择、导航和数值控件
+
+交互控件的状态参数为 `Bindable<T>`（可传 `State`、`Binding`），展示控件为 `Observable<T>`。
+
+| 类型 | 构造函数 | 补充 API/行为 |
+|---|---|---|
+| `Checkbox` | `Checkbox(label, Bindable<Bool>)` | `id`；鼠标释放或 Enter/Space 切换 |
+| `Switch` | `Switch(label, Bindable<Bool>)` | `id`；二态开关 |
+| `RadioButton` | `RadioButton(label, selected, value)` | `id`；多个实例共享同一 `Bindable<Int64>` |
+| `Picker` | `Picker(id, items, selected)` | 点击前后区域或 Left/Right 循环选择 |
+| `Stepper` | `Stepper(id, Bindable<Int64>)` | `range(lower, upper)`、`step(value)` |
 | `SegmentedControl` | `SegmentedControl(items, selected)` | 分段单选 |
-| `TabView` | `TabView(labels, selected, body)` | 标签页；body 按顺序声明页面 |
-| `ProgressBar` | `ProgressBar(value, lower=0, upper=1)` | 只读进度显示 |
-| `Slider` | `Slider(id, value, lower=0, upper=1)` | 鼠标和键盘可操作滑块 |
+| `TabView` | `TabView(labels, selected) { pages }` | 页面按标签顺序声明 |
+| `ListView` | `ListView(items, selected)` | `scrollState`；选中索引和滚轮滚动 |
+| `ProgressBar` | `ProgressBar(Observable<Float32>)` | `range(lower, upper)` |
+| `Slider` | `Slider(id, Bindable<Float32>)` | `range(lower, upper)`；拖动和 Left/Right |
 
-`selected` 使用 `State<Int64>`，`value` 使用 `State<Float32>`。当上下界相等或输入越界时，控件会
-按内部安全范围归一化。
+`Stepper.step` 的值必须大于 0，否则抛 `IllegalArgumentException`。数值控件会安全处理反向范围和
+越界输入。
 
-## 文本包 `cui.text`
+## 9. 文本
 
-### `TextField`
+| 类型 | 构造函数 | 链式 API/行为 |
+|---|---|---|
+| `TextField` | `TextField(id, text: Bindable<String>)` | `cursorState`；单行 UTF-8 编辑 |
+| `TextArea` | `TextArea(id, text: Bindable<String>)` | `scrollState`、`cursorState`、`editable` |
 
-`TextField(id, text, cursor: ?State<Int64> = None)`：单行 UTF-8 文本输入。外部 cursor 用于跨帧或
-多组件共享光标位置。
+插入光标与字形行等高、闪烁周期约 1.06 秒；点击定位按真实文本测量落在最近字符边界；
+超宽内容裁剪于控件表面内。`TextEditState(text, cursor=None)` 或 `TextEditState(value)` 提供：
 
-### `TextArea`
+- `normalizeCursor`、`moveTo`。
+- `insert`、`backspace`、`deleteForward`。
+- `moveLeft`、`moveRight`、`moveToStart`、`moveToEnd`。
+- `moveToLineStart`、`moveToLineEnd`、`moveLineUp`、`moveLineDown`。
 
-`TextArea(id, text, scroll=None, cursor=None, editable=true)`：多行、可滚动文本区域。`editable=false`
-时保留导航和滚动，忽略编辑操作。
+## 10. 媒体与事件包装器
 
-### `TextEditState`
+- `CanvasWidget(onDraw).onEvent(handler)`：自定义绘制和事件区域。
+- `ImageView(path).fit(ImageFit)`：`Stretch`、`Contain`、`Cover`；实现 `Resource`；
+  `preferredWidth`/`preferredHeight` 为 `Length`。
+- `EventHandler(onEvent) { ... }`：在子树前截获事件。
+- `FrameHandler(onFrame) { ... }`：接收每帧 `FrameInfo`。
 
-构造方式为 `TextEditState(text, cursor=None)` 或 `TextEditState(value)`。公开方法：
-
-- `normalizeCursor`、`moveTo`：将光标归一化到有效 UTF-8 边界或指定位置。
-- `insert`、`backspace`、`deleteForward`：文本修改。
-- `moveLeft`、`moveRight`、`moveToStart`、`moveToEnd`：整体导航。
-- `moveToLineStart`、`moveToLineEnd`、`moveLineUp`、`moveLineDown`：行导航。
-
-## 媒体包 `cui.media`
-
-### `CanvasWidget`
-
-```cangjie
-CanvasWidget(
-    onDraw: (Renderer, Rect) -> Unit,
-    onEvent: (UiEvent, Rect) -> Bool = {_, _ => false}
-)
-```
-
-### `ImageView`
-
-`ImageView(path, fit=ImageFit.Contain, preferredWidth=None, preferredHeight=96)`。实现 `Widget` 与
-`Resource`，提供 `isClosed` 和 `close`。`ImageFit` 包含 `Stretch`、`Contain`、`Cover`。
-
-## 桌面应用 `DesktopApp`
+## 11. `DesktopApp`
 
 ```cangjie
-DesktopApp(
-    spec: WindowSpec,
-    theme: Theme = Theme.light(),
-    frameDelay: UInt32 = 16,
-    metadata: ?AppMetadata = None,
-    hints: Array<SdlHintSetting> = []
-)
+DesktopApp(spec, theme: Theme.light(), frameDelay: UInt32(16), fontScale: 1.0, metadata: None, hints: [])
 ```
 
 | 方法 | 说明 |
 |---|---|
-| `run(body)` | 启动事件循环并逐帧构建根视图，直到关闭 |
-| `manage(resource)` | 托管 Resource，退出时逆序关闭 |
-| `openFileDialog(options)` | 打开异步文件选择对话框 |
-| `saveFileDialog(options)` | 打开异步保存对话框 |
-| `openFolderDialog(options)` | 打开异步目录选择对话框 |
+| `run(body)` | 启动逐帧构建、布局、事件和绘制循环 |
+| `manage(resource)` | 托管资源，退出时逆序关闭 |
+| `setMinimumSize(width, height)` | 以逻辑像素约束窗口最小尺寸 |
+| `clearRememberedState()` | 清空局部状态存储 |
+| `openFileDialog`、`saveFileDialog`、`openFolderDialog` | 创建异步文件对话框请求 |
 
-## 从 `cui` 重新导出的 SDL API
+`fontScale` 作用于全部 `fp` 尺寸；`WindowSpec.scale` 决定 `px` 与 `vp` 的换算。
 
-`cui` 还重新导出以下底层能力，便于 GUI 应用只依赖一个根包：
-
-- 几何与绘制：`Color`、`Point`、`Size`、`Rect`、`Insets`、`Pen`、`Renderer`、`SurfaceStyle`。
-- 图像与资源：`Surface`、`Texture`、纹理模式和图像格式。
-- 窗口与事件：`WindowSpec`、`SdlWindow`、窗口状态类型、`UiEvent`、`Key`、`MouseButton`。
-- 桌面集成：文件对话框、消息框、剪贴板、输入、显示器、路径、文件系统、Hints、时间和系统信息。
-
-这些类型的字段、枚举成员和方法见 [SDL API 参考](../sdl/docs/api-reference.md)。
+底层重新导出类型与方法的完整定义见 [SDL API 参考](../sdl/docs/api-reference.md)。

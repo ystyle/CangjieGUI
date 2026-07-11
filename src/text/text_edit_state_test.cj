@@ -1,7 +1,7 @@
 package cui.text
 
-import sdl.{Key, Rect, Renderer, UiEvent}
-import cui.core.{State, Theme, UiContext}
+import sdl.{Key, MouseButton, Rect, Renderer, UiEvent}
+import cui.core.{State, StateStore, Theme, UiContext, buildRoot}
 
 private func textTestContext(): UiContext {
     UiContext(Renderer.headless(), Theme.light())
@@ -91,4 +91,22 @@ func textAreaReadOnlyStillMovesCursor(): Unit {
     @Expect(area.handle(ctx, UiEvent.KeyDown(Key.Left, false)))
     @Expect(text.value, "abc")
     @Expect(cursor.value, Int64(1))
+}
+
+@Test
+func textFieldImplicitCursorSurvivesKeyedRebuild(): Unit {
+    let ctx = UiContext(Renderer.headless(), Theme.light())
+    let store = StateStore()
+    let text = State<String>("abc")
+
+    let first = buildRoot({=> TextField("remembered.field", text)}, store)
+    first.layout(ctx, Rect(0.0, 0.0, 180.0, 34.0))
+    let _ = first.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 170.0, 10.0))
+    let _ = first.handle(ctx, UiEvent.KeyDown(Key.Left, false))
+
+    let second = buildRoot({=> TextField("remembered.field", text)}, store)
+    second.layout(ctx, Rect(0.0, 0.0, 180.0, 34.0))
+    let _ = second.handle(ctx, UiEvent.TextInput("X"))
+
+    @Expect(text.value, "abXc")
 }

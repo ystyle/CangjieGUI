@@ -10,7 +10,7 @@ import sdl.system.AppMetadata
 import sdl.system.ApplicationMetadata
 import sdl.system.SdlHintSetting
 import sdl.system.SdlHints
-import cui.core.{Theme, UiContext, Widget, buildChild}
+import cui.core.{StateStore, Theme, UiContext, Widget, buildRoot}
 
 // Long enough for the first paint to settle and for background work started at launch
 // (dialog-free examples fetch data on worker threads) to land in the frame.
@@ -21,6 +21,7 @@ public class DesktopApp {
     private let ctx: UiContext
     private let frameDelay: UInt32
     private let resources = ArrayList<Resource>()
+    private let stateStore = StateStore()
     private let snapshotPath: ?String
     private var frames: UInt64 = 0
 
@@ -28,17 +29,34 @@ public class DesktopApp {
         spec: WindowSpec,
         theme!: Theme = Theme.light(),
         frameDelay!: UInt32 = UInt32(16),
+        fontScale!: Float32 = 1.0,
         metadata!: ?AppMetadata = None,
         hints!: Array<SdlHintSetting> = []
     ) {
         this.window = configuredWindow(spec, metadata, hints)
         this.ctx = UiContext(window.renderer, theme)
+        this.ctx.displayScale = window.scale
+        this.ctx.fontScale = max(0.1, fontScale)
         this.frameDelay = frameDelay
         this.snapshotPath = snapshotArgument()
     }
 
     public func manage(resource: Resource): Unit {
         resources.add(resource)
+    }
+
+    /**
+     * Prevents the user from shrinking the window below `width` x `height` logical
+     * pixels. Layouts do not reflow below their design minimum, so resizable windows
+     * should set one to keep content from being squeezed off screen.
+     */
+    public func setMinimumSize(width: Int32, height: Int32): Unit {
+        window.setMinimumSize(width, height)
+    }
+
+    /** Drops all local values created by `rememberState` before the next rebuild. */
+    public func clearRememberedState(): Unit {
+        stateStore.clear()
     }
 
     public func openFileDialog(options!: FileDialogOptions = FileDialogOptions()): FileDialogRequest {
@@ -59,7 +77,7 @@ public class DesktopApp {
             let frame = nextFrame(previousTick)
             previousTick = frame.elapsedMs
             ctx.frame = frame
-            let widget = buildChild(body)
+            let widget = buildRoot(body, stateStore)
             widget.layout(ctx, Rect(0.0, 0.0, Float32(window.width), Float32(window.height)))
             drainEvents(widget)
             dispatchEvent(widget, UiEvent.Frame(frame))
@@ -80,6 +98,12 @@ public class DesktopApp {
                 case UiEvent.WindowResized(w, h) =>
                     window.width = Int32(Float32(w) / window.scale)
                     window.height = Int32(Float32(h) / window.scale)
+                case UiEvent.MouseDown(MouseButton.Left, _, _) =>
+                    // A primary press either moves focus to the claiming control or
+                    // blurs the current one, matching desktop conventions.
+                    ctx.beginPointerPress()
+                    dispatchEvent(widget, event)
+                    ctx.settleFocusAfterPress()
                 case _ => dispatchEvent(widget, event)
             }
             completePointer(event)
@@ -134,6 +158,7 @@ public class DesktopApp {
             case UiEvent.MouseUp(MouseButton.Left, _, _) =>
                 ctx.leftMouseDown = false
                 ctx.clearDrag()
+                ctx.clearPress()
             case _ => ()
         }
     }

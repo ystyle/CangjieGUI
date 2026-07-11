@@ -3,8 +3,17 @@ package cui.core
 import sdl.{Rect, clampF32}
 
 internal let CUI_SCROLL_W: Float32 = 6.0
+internal let CUI_SCROLL_MARGIN: Float32 = 2.0
 internal let CUI_SCROLL_MIN_THUMB_H: Float32 = 18.0
 internal let CUI_SCROLL_WHEEL_STEP: Float32 = 72.0
+
+/**
+ * Viewport width a scrollable container reserves for the bar once content overflows,
+ * so the bar rides in its own lane instead of covering the content's right edge.
+ */
+internal func scrollBarGutter(): Float32 {
+    CUI_SCROLL_W + CUI_SCROLL_MARGIN * 2.0
+}
 
 protected func scrollOffsetAfterWheel(
     current: Float32,
@@ -41,7 +50,8 @@ protected func drawVerticalScrollBar(
     if (contentH <= viewportH || frame.h <= 0.0) {
         return
     }
-    let track = Rect(frame.right() - CUI_SCROLL_W - 2.0, frame.y + 2.0, CUI_SCROLL_W, max(0.0, frame.h - 4.0))
+    let track = Rect(frame.right() - CUI_SCROLL_W - CUI_SCROLL_MARGIN, frame.y + CUI_SCROLL_MARGIN,
+        CUI_SCROLL_W, max(0.0, frame.h - CUI_SCROLL_MARGIN * 2.0))
     let thumbH = max(CUI_SCROLL_MIN_THUMB_H, track.h * viewportH / contentH)
     let scrollableTrack = max(0.0, track.h - thumbH)
     let thumbY = track.y + scrollableTrack * clampF32(offset / maxScrollOffset(contentH, viewportH), 0.0, 1.0)
