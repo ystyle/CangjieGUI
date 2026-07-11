@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.system
 
 internal let SDL_FOLDER_HOME: Int32 = 0
 internal let SDL_FOLDER_DESKTOP: Int32 = 1
@@ -30,6 +27,8 @@ internal struct SdlPathInfo {
 }
 
 foreign {
+    func SDL_free(mem: CPointer<UInt8>): Unit
+
     func SDL_GetBasePath(): CString
 
     func SDL_GetPrefPath(org: CString, app: CString): CString

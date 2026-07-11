@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl
 
 /*
@@ -54,14 +51,6 @@ foreign {
         a: Float32
     ): Bool
 
-    func SDL_GetRenderDrawColorFloat(
-        renderer: CPointer<Unit>,
-        r: CPointer<Float32>,
-        g: CPointer<Float32>,
-        b: CPointer<Float32>,
-        a: CPointer<Float32>
-    ): Bool
-
     func SDL_RenderClear(renderer: CPointer<Unit>): Bool
 
     func SDL_RenderPresent(renderer: CPointer<Unit>): Bool
@@ -73,8 +62,6 @@ foreign {
     func SDL_RenderRect(renderer: CPointer<Unit>, rect: CPointer<SdlFRect>): Bool
 
     func SDL_RenderFillRect(renderer: CPointer<Unit>, rect: CPointer<SdlFRect>): Bool
-
-    func SDL_RenderDebugText(renderer: CPointer<Unit>, x: Float32, y: Float32, text: CString): Bool
 
     func SDL_RenderReadPixels(renderer: CPointer<Unit>, rect: CPointer<SdlRect>): CPointer<Unit>
 

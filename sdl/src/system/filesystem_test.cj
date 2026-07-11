@@ -1,12 +1,8 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
 
 import std.fs.File
 import std.fs.Path
-import sdl.{CuiException, SDL_GLOB_CASEINSENSITIVE, SDL_PATHTYPE_DIRECTORY, SDL_PATHTYPE_FILE, SDL_PATHTYPE_NONE, 
-    SDL_PATHTYPE_OTHER}
+import sdl.CuiException
 
 @Test
 func entryTypeFromCodeMapsSdlValues(): Unit {

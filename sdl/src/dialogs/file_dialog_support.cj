@@ -1,12 +1,9 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.dialogs
 
 import std.collection.ArrayList
 import std.collection.concurrent.ConcurrentHashMap
 import std.sync.AtomicInt64
-import sdl.{lastSdlError, SdlDialogFileFilter, SdlWindow}
+import sdl.{lastSdlError, SdlWindow}
 
 internal let FILE_DIALOG_MAX_FILTERS: Int64 = 64
 private let FILE_DIALOG_NEXT_ID = AtomicInt64(1)

@@ -1,7 +1,4 @@
 /*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-/*
  * CUI example: a desktop calculator.
  *
  * What it demonstrates:

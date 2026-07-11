@@ -1,11 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
 
-import sdl.{CuiException, SDL_FOLDER_DESKTOP, SDL_FOLDER_DOCUMENTS, SDL_FOLDER_DOWNLOADS, SDL_FOLDER_HOME, 
-    SDL_FOLDER_MUSIC, SDL_FOLDER_PICTURES, SDL_FOLDER_PUBLICSHARE, SDL_FOLDER_SAVEDGAMES, SDL_FOLDER_SCREENSHOTS, 
-    SDL_FOLDER_TEMPLATES, SDL_FOLDER_VIDEOS}
+import sdl.CuiException
 
 @Test
 func userFolderCodeMapsSdlValues(): Unit {

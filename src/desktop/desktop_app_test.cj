@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package cui.desktop
 
 @Test

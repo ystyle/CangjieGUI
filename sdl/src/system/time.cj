@@ -1,9 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
 
-import sdl.{ensureSdl, SdlDateTime}
+import sdl.ensureSdl
 
 public enum DateFormat {
     | YearMonthDay

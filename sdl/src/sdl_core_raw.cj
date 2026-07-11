@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl
 
 foreign {
@@ -19,6 +16,4 @@ foreign {
     func SDL_GetTicks(): UInt64
 
     func SDL_Delay(ms: UInt32): Unit
-
-    func SDL_free(mem: CPointer<UInt8>): Unit
 }

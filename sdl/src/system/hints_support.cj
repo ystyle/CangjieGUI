@@ -1,12 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
 
-import sdl.{CuiException, ensureSdl, SDL_HINT_APP_ID, SDL_HINT_APP_NAME, SDL_HINT_DEFAULT, SDL_HINT_FILE_DIALOG_DRIVER, 
-    SDL_HINT_IME_IMPLEMENTED_UI, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, SDL_HINT_NORMAL, SDL_HINT_OVERRIDE, 
-    SDL_HINT_RENDER_VSYNC, SDL_HINT_RETURN_KEY_HIDES_IME, SDL_HINT_VIDEO_ALLOW_SCREENSAVER, SDL_HINT_VIDEO_DRIVER, 
-    SDL_HINT_WINDOWS_CLOSE_ON_ALT_F4}
+import sdl.{CuiException, ensureSdl}
 
 internal func hintPriorityCode(priority: HintPriority): Int32 {
     match (priority) {

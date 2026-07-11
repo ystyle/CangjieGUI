@@ -1,10 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.input
-
-import sdl.{SDL_KMOD_CAPS, SDL_KMOD_LALT, SDL_KMOD_LCTRL, SDL_KMOD_LEVEL5, SDL_KMOD_LGUI, SDL_KMOD_LSHIFT}
-import sdl.{SDL_KMOD_MODE, SDL_KMOD_NUM, SDL_KMOD_RALT, SDL_KMOD_RCTRL, SDL_KMOD_RGUI, SDL_KMOD_RSHIFT, SDL_KMOD_SCROLL}
 
 public struct KeyModifiers {
     public let raw: UInt16

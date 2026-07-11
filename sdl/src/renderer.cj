@@ -1,9 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl
 
-import sdl.ffi.{NativeTextColor, NativeTextMetrics, NativeTextRenderer, SdlFfiException}
+import sdl.text.{NativeTextColor, NativeTextException, NativeTextMetrics, NativeTextRenderer}
 
 /**
  * Standard text sizes shared by the renderer, widgets, and applications.
@@ -401,13 +398,16 @@ private func roundedRadius(rect: Rect, radius: Float32): Float32 {
     clampF32(radius, 0.0, min(rect.w, rect.h) / 2.0)
 }
 
+/**
+ * Throws `CuiException` when the system-font backend cannot initialize.
+ */
 private func createTextBackend(renderer: CPointer<Unit>): ?NativeTextRenderer {
     if (renderer.isNull()) {
         return None
     }
     try {
         Some(NativeTextRenderer(renderer))
-    } catch (error: SdlFfiException) {
+    } catch (error: NativeTextException) {
         throw CuiException("System UI font initialization failed: ${error.message}")
     }
 }

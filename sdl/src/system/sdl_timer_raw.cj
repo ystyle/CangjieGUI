@@ -1,11 +1,10 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.system
 
 internal let SDL_NS_PER_MS: UInt64 = UInt64(1000000)
 
 foreign {
+    func SDL_GetTicks(): UInt64
+
     func SDL_GetTicksNS(): UInt64
 
     func SDL_GetPerformanceCounter(): UInt64

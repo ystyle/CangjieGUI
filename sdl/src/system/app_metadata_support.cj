@@ -1,11 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
 
-import sdl.{CuiException, ensureSdl, SDL_PROP_APP_METADATA_COPYRIGHT_STRING, SDL_PROP_APP_METADATA_CREATOR_STRING, 
-    SDL_PROP_APP_METADATA_IDENTIFIER_STRING, SDL_PROP_APP_METADATA_NAME_STRING, SDL_PROP_APP_METADATA_TYPE_STRING, 
-    SDL_PROP_APP_METADATA_URL_STRING, SDL_PROP_APP_METADATA_VERSION_STRING}
+import sdl.{CuiException, ensureSdl}
 
 internal func appMetadataPropertyName(property: AppMetadataProperty): String {
     match (property) {

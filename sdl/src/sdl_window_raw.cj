@@ -1,9 +1,8 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl
 
 foreign {
+    func SDL_SetWindowRelativeMouseMode(window: CPointer<Unit>, enabled: Bool): Bool
+
     func SDL_CreateWindowAndRenderer(
         title: CString,
         width: Int32,

@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.system
 
 internal let SDL_PROP_APP_METADATA_NAME_STRING = "SDL.app.metadata.name"
 internal let SDL_PROP_APP_METADATA_VERSION_STRING = "SDL.app.metadata.version"

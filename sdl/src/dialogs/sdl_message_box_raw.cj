@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.dialogs
 
 internal let SDL_MESSAGEBOX_ERROR: UInt32 = UInt32(0x00000010)
 internal let SDL_MESSAGEBOX_WARNING: UInt32 = UInt32(0x00000020)

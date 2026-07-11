@@ -1,9 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.dialogs
 
-import sdl.{ensureSdl, SdlMessageBoxButtonData, SdlMessageBoxData, SdlWindow}
+import sdl.{ensureSdl, SdlWindow}
 
 public enum MessageBoxKind {
     | Error

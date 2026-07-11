@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.system
 
 foreign {
     func SDL_GetPlatform(): CString

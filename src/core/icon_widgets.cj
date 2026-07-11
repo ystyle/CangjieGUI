@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package cui.core
 
 import sdl.{Color, FontSizes, IconName, MouseButton, Rect, Size, SurfaceStyle, UiEvent, drawIcon}

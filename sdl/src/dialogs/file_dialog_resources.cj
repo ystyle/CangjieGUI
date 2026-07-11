@@ -1,9 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.dialogs
-
-import sdl.{SdlDialogFileFilter}
 
 internal func allocateFileDialogResources(id: Int64, options: FileDialogOptions): FileDialogNativeResources {
     let rawFilters = allocateRawDialogFilters(options.filters.size)

@@ -1,10 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
 
-import sdl.{CuiException, SDL_DATE_FORMAT_DDMMYYYY, SDL_DATE_FORMAT_MMDDYYYY, SDL_DATE_FORMAT_YYYYMMDD, 
-    SDL_TIME_FORMAT_12HR, SDL_TIME_FORMAT_24HR}
+import sdl.CuiException
 
 @Test
 func dateAndClockFormatsMapSdlValues(): Unit {

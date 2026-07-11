@@ -1,11 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.displays
 
-import sdl.{CuiException, ensureSdl, lastSdlError, Rect, SDL_INIT_VIDEO, SDL_ORIENTATION_LANDSCAPE, 
-    SDL_ORIENTATION_LANDSCAPE_FLIPPED, SDL_ORIENTATION_PORTRAIT, SDL_ORIENTATION_PORTRAIT_FLIPPED, 
-    SDL_ORIENTATION_UNKNOWN, SdlDisplayMode, SdlRect}
+import sdl.{CuiException, ensureSdl, lastSdlError, Rect, SDL_INIT_VIDEO, SdlDisplayMode, SdlRect}
 
 public enum DisplayOrientation {
     | Unknown

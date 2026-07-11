@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package cui.text
 
 private let UTF8_CONTINUATION_LOW: UInt8 = UInt8(128)

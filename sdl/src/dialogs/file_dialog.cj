@@ -1,10 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.dialogs
 
 import std.sync.Mutex
-import sdl.{SdlDialogFileFilter}
 
 public enum FileDialogResult {
     | FileDialogPending

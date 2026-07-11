@@ -1,10 +1,6 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.displays
 
-import sdl.{SDL_ORIENTATION_LANDSCAPE, SDL_ORIENTATION_LANDSCAPE_FLIPPED, SDL_ORIENTATION_PORTRAIT, 
-    SDL_ORIENTATION_PORTRAIT_FLIPPED, SDL_ORIENTATION_UNKNOWN, SdlDisplayMode}
+import sdl.SdlDisplayMode
 
 @Test
 func displayOrientationFromCodeMapsSdlValues(): Unit {

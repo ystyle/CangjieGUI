@@ -1,9 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.system
-
-import sdl.SDL_NS_PER_MS
 
 public class PerformanceClock {
     public static func ticksMilliseconds(): UInt64 {

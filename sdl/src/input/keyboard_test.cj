@@ -1,9 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl.input
-
-import sdl.{SDL_KMOD_CAPS, SDL_KMOD_LALT, SDL_KMOD_LCTRL, SDL_KMOD_RGUI, SDL_KMOD_RSHIFT}
 
 @Test
 func keyModifiersMapSdlMasks(): Unit {

@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.dialogs
 
 @C
 internal struct SdlDialogFileFilter {

@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.system
 
 internal let SDL_DATE_FORMAT_YYYYMMDD: Int32 = 0
 internal let SDL_DATE_FORMAT_DDMMYYYY: Int32 = 1

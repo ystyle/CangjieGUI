@@ -1,9 +1,8 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.input
 
 foreign {
+    func SDL_free(mem: CPointer<UInt8>): Unit
+
     func SDL_SetClipboardText(text: CString): Bool
 
     func SDL_GetClipboardText(): CString

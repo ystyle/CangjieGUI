@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl.ffi
+package sdl.text
 
 foreign {
     func TTF_Init(): Bool

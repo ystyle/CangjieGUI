@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.system
 
 internal let SDL_HINT_DEFAULT: Int32 = 0
 internal let SDL_HINT_NORMAL: Int32 = 1
@@ -18,8 +15,6 @@ internal let SDL_HINT_VIDEO_DRIVER = "SDL_VIDEO_DRIVER"
 internal let SDL_HINT_WINDOWS_CLOSE_ON_ALT_F4 = "SDL_WINDOWS_CLOSE_ON_ALT_F4"
 
 foreign {
-    func SDL_SetHint(name: CString, value: CString): Bool
-
     func SDL_SetHintWithPriority(name: CString, value: CString, priority: Int32): Bool
 
     func SDL_ResetHint(name: CString): Bool

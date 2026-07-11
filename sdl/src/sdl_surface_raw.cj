@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl
 
 internal let SDL_PIXELFORMAT_RGBA32: UInt32 = UInt32(0x16762004)

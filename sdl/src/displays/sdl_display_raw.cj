@@ -1,9 +1,18 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl
+package sdl.displays
+
+import sdl.{SdlDisplayMode, SdlPoint, SdlRect}
+
+internal let SDL_ORIENTATION_UNKNOWN: Int32 = 0
+internal let SDL_ORIENTATION_LANDSCAPE: Int32 = 1
+internal let SDL_ORIENTATION_LANDSCAPE_FLIPPED: Int32 = 2
+internal let SDL_ORIENTATION_PORTRAIT: Int32 = 3
+internal let SDL_ORIENTATION_PORTRAIT_FLIPPED: Int32 = 4
 
 foreign {
+    func SDL_free(mem: CPointer<UInt8>): Unit
+
+    func SDL_Init(flags: UInt32): Bool
+
     func SDL_GetDisplays(count: CPointer<Int32>): CPointer<UInt32>
 
     func SDL_GetPrimaryDisplay(): UInt32
@@ -38,6 +47,4 @@ foreign {
     func SDL_GetDisplayForPoint(point: CPointer<SdlPoint>): UInt32
 
     func SDL_GetDisplayForRect(rect: CPointer<SdlRect>): UInt32
-
-    func SDL_GetDisplayForWindow(window: CPointer<Unit>): UInt32
 }

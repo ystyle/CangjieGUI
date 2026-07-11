@@ -1,7 +1,4 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
-package sdl.ffi
+package sdl.text
 
 import std.collection.ArrayList
 import std.math.abs
@@ -9,7 +6,7 @@ import std.math.abs
 private let DEFAULT_POINT_SIZE: Float32 = 15.0
 private let FONT_SIZE_EPSILON: Float32 = 0.01
 
-protected class SdlFfiException <: Exception {
+protected class NativeTextException <: Exception {
     public init(message: String) {
         super(message)
     }
@@ -45,9 +42,12 @@ protected class NativeTextRenderer {
     private let fonts = ArrayList<NativeFont>()
     private var closed: Bool = false
 
+    /**
+     * Throws `NativeTextException` when SDL_ttf cannot initialize the system-font backend.
+     */
     public init(renderer: CPointer<Unit>) {
         if (!unsafe { TTF_Init() }) {
-            throw SdlFfiException("TTF_Init failed: ${lastNativeError()}")
+            throw NativeTextException("TTF_Init failed: ${lastNativeError()}")
         }
         let opened = tryOpenSystemFont(DEFAULT_POINT_SIZE)
         if (let Some(value) <- opened) {
@@ -55,18 +55,18 @@ protected class NativeTextRenderer {
             fonts.add(value.font)
         } else {
             unsafe { TTF_Quit() }
-            throw SdlFfiException("No supported system UI font was found: ${lastNativeError()}")
+            throw NativeTextException("No supported system UI font was found: ${lastNativeError()}")
         }
         let createdEngine = unsafe { TTF_CreateRendererTextEngine(renderer) }
         this.engine = createdEngine
         if (createdEngine.isNull()) {
             closeFonts()
             unsafe { TTF_Quit() }
-            throw SdlFfiException("TTF_CreateRendererTextEngine failed: ${lastNativeError()}")
+            throw NativeTextException("TTF_CreateRendererTextEngine failed: ${lastNativeError()}")
         }
         try {
             fonts[0].attach(engine)
-        } catch (error: SdlFfiException) {
+        } catch (error: NativeTextException) {
             closeFonts()
             unsafe {
                 TTF_DestroyRendererTextEngine(engine)
@@ -173,12 +173,15 @@ private class NativeFont {
         this.pointSize = pointSize
     }
 
+    /**
+     * Throws `NativeTextException` when SDL_ttf cannot create the cached text object.
+     */
     func attach(engine: CPointer<Unit>): Unit {
         let createdText = unsafe {
             TTF_CreateText(engine, font, CString(CPointer<UInt8>()), UIntNative(0))
         }
         if (createdText.isNull()) {
-            throw SdlFfiException("TTF_CreateText failed: ${lastNativeError()}")
+            throw NativeTextException("TTF_CreateText failed: ${lastNativeError()}")
         }
         text = createdText
     }
@@ -229,13 +232,16 @@ private func tryOpenSystemFont(pointSize: Float32): ?OpenedFont {
     None
 }
 
+/**
+ * Throws `NativeTextException` when SDL_ttf cannot open the selected system font.
+ */
 private func openFont(path: String, pointSize: Float32): NativeFont {
     let cPath = unsafe { LibC.mallocCString(path) }
     var font = CPointer<Unit>()
     try (pathResource = cPath.asResource()) {
         font = unsafe { TTF_OpenFont(pathResource.value, pointSize) }
         if (font.isNull()) {
-            throw SdlFfiException("TTF_OpenFont failed: ${lastNativeError()}")
+            throw NativeTextException("TTF_OpenFont failed: ${lastNativeError()}")
         }
     }
     NativeFont(font, pointSize)
@@ -262,9 +268,12 @@ private func normalizePointSize(pointSize: Float32): Float32 {
     }
 }
 
+/**
+ * Throws `NativeTextException` when an SDL_ttf operation reports failure.
+ */
 private func ensureNative(ok: Bool, api: String): Unit {
     if (!ok) {
-        throw SdlFfiException("${api} failed: ${lastNativeError()}")
+        throw NativeTextException("${api} failed: ${lastNativeError()}")
     }
 }
 

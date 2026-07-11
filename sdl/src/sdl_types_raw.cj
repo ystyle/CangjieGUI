@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2026. CangjieGUI contributors. All rights reserved.
- */
 package sdl
 
 internal let SDL_INIT_VIDEO: UInt32 = UInt32(0x00000020)
@@ -68,24 +65,6 @@ internal let SDL_BLENDMODE_BLEND: UInt32 = UInt32(1)
 internal let SDL_TEXTUREACCESS_TARGET: Int32 = 2
 internal let SDL_SCALEMODE_LINEAR: Int32 = 1
 internal let SDL_PIXELFORMAT_RGBA8888: UInt32 = 0x16462004
-internal let SDL_KMOD_LSHIFT: UInt16 = UInt16(0x0001)
-internal let SDL_KMOD_RSHIFT: UInt16 = UInt16(0x0002)
-internal let SDL_KMOD_LEVEL5: UInt16 = UInt16(0x0004)
-internal let SDL_KMOD_LCTRL: UInt16 = UInt16(0x0040)
-internal let SDL_KMOD_RCTRL: UInt16 = UInt16(0x0080)
-internal let SDL_KMOD_LALT: UInt16 = UInt16(0x0100)
-internal let SDL_KMOD_RALT: UInt16 = UInt16(0x0200)
-internal let SDL_KMOD_LGUI: UInt16 = UInt16(0x0400)
-internal let SDL_KMOD_RGUI: UInt16 = UInt16(0x0800)
-internal let SDL_KMOD_NUM: UInt16 = UInt16(0x1000)
-internal let SDL_KMOD_CAPS: UInt16 = UInt16(0x2000)
-internal let SDL_KMOD_MODE: UInt16 = UInt16(0x4000)
-internal let SDL_KMOD_SCROLL: UInt16 = UInt16(0x8000)
-internal let SDL_ORIENTATION_UNKNOWN: Int32 = 0
-internal let SDL_ORIENTATION_LANDSCAPE: Int32 = 1
-internal let SDL_ORIENTATION_LANDSCAPE_FLIPPED: Int32 = 2
-internal let SDL_ORIENTATION_PORTRAIT: Int32 = 3
-internal let SDL_ORIENTATION_PORTRAIT_FLIPPED: Int32 = 4
 internal let SDL_PROGRESS_STATE_INVALID: Int32 = -1
 internal let SDL_PROGRESS_STATE_NONE: Int32 = 0
 internal let SDL_PROGRESS_STATE_INDETERMINATE: Int32 = 1
