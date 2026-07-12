@@ -4,7 +4,7 @@
  * 演示内容：
  *  - 保持 UI 响应：tasklist 快照在 spawn 的工作线程上运行，结果经互斥量保护的
  *    信箱交回，帧循环每帧收取一次 —— UI 线程从不等待子进程
- *  - TabView 页面、只读滚动 TextArea、由 State 派生的概览卡片文案
+ *  - TabView 页面、可排序的 Table 进程表（由 tasklist CSV 派生）、由 State 派生的概览卡片文案
  *  - 桌面集成：CPU/显示器/电源查询、应用元数据与 SDL 提示
  *
  * 文件分工：model.cj 状态与常量，worker.cj 后台刷新链路，views.cj 界面结构，

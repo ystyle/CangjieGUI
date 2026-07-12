@@ -15,15 +15,16 @@ func copyAll(body: State<String>, status: State<String>): Unit {
     }
 }
 
-func pasteClipboard(body: State<String>, cursor: State<Int64>, status: State<String>): Unit {
+func pasteClipboard(body: State<String>, cursor: State<Int64>, anchor: State<Int64>, status: State<String>): Unit {
     try {
         let text = Clipboard.getText()
         if (text.size <= 0) {
             status.value = "剪贴板为空"
             return
         }
-        // 经 TextEditState 在光标处插入，粘贴后光标自动落到插入内容末尾。
-        TextEditState(body, cursor: Some(cursor)).insert(text)
+        // 经 TextEditState 在光标处插入。锚点与光标同源传入：插入后两者一起落到
+        // 内容末尾，编辑区不会残留幻影选区。
+        TextEditState(body, cursor: Some(cursor), anchor: Some(anchor)).insert(text)
         status.value = "已粘贴剪贴板内容"
     } catch (e: CuiException) {
         status.value = "无法读取剪贴板"

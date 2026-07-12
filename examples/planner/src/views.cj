@@ -3,13 +3,13 @@
  *
  *  - 左侧导航是固定宽度侧栏；底部说明文字用 maxLines 在栏宽内换行，不会溢出面板
  *  - 概览页与偏好页分别放进 ScrollView，超出高度时可滚动
- *  - 进度圆环文字由 DerivedState 提供，尺寸一律使用 vp/fp 单位
+ *  - 进度用 ProgressBar（自带居中动画百分比），尺寸一律使用 vp/fp 单位
  */
-package cui_focus_planner
+package cui_planner
 
-import cui.{Alignment, Button, ButtonRole, Color, CrossAxisAlignment, FlowRow, FontSizes, Grid, HStack, Icon, IconName,
-    Keyed, Label, LengthUnits, Panel, Picker, ProgressBar, RadioButton, ScrollView, Spacer, Stepper, Switch, TextAlign,
-    TextField, VStack, ZStack, rememberState}
+import cui.{Button, ButtonRole, Color, ComboBox, CrossAxisAlignment, Dropdown, FlowRow, FontSizes, Grid, HStack, Icon,
+    IconName, Keyed, Label, LengthUnits, Panel, ProgressBar, RadioButton, ScrollView, Spacer, Stepper, Switch,
+    TextField, VStack, rememberState}
 
 func plannerView(model: PlannerModel): Unit {
     VStack {
@@ -109,12 +109,8 @@ func focusCard(model: PlannerModel): Unit {
                 Spacer()
                 Button("完成本轮", {=> model.completed.value = 1.0}).role(ButtonRole.Primary)
             }.flexible(false)
-            ZStack {
-                ProgressBar(model.completed).height(24.vp).fillWidth()
-                Label(model.percentText.value)
-                    .textAlign(TextAlign.Center)
-                    .fontSize(FontSizes.CAPTION)
-            }.alignment(Alignment.Center).height(26.vp)
+            // ProgressBar 自带居中百分比显示（并附动画），无需再叠加标签。
+            ProgressBar(model.completed).height(26.vp).fillWidth()
         }.spacing(12.vp).flexible(false)
     }.contentPadding(16.vp).style(accentCard())
 }
@@ -168,7 +164,15 @@ func preferencesPage(model: PlannerModel): Unit {
                 HStack {
                     Label("内容间距")
                     Spacer()
-                    Picker("planner.density", ["紧凑", "舒适", "宽松"], model.density)
+                    Dropdown("planner.density", ["紧凑", "舒适", "宽松"], model.density)
+                }.flexible(false)
+            }
+            settingsSection("常用地点") {
+                HStack {
+                    Label("默认工作城市")
+                    Spacer()
+                    ComboBox("planner.city", model.location,
+                        ["北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "西安"]).width(180.vp)
                 }.flexible(false)
             }
         }.spacing(14.vp).flexible(false)

@@ -12,7 +12,8 @@ import cui.{DateTimeParts, DerivedState, State, Time, Weekday, derive}
 let MONTH_NAMES = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"]
 
 class CalendarModel {
-    let today: DateTimeParts
+    /** “今天”的日期。跨日由 refreshToday 更新，视图每帧重建自然拿到新值。 */
+    private var today: DateTimeParts
     let year: State<Int64>
     let month: State<Int64>
     let selected: State<Int64>
@@ -26,6 +27,13 @@ class CalendarModel {
         this.month = State<Int64>(Int64(today.month))
         this.selected = State<Int64>(Int64(today.day))
         this.title = derive(this.year, this.month, {y, m => "${y} 年 ${MONTH_NAMES[m - 1]}"})
+    }
+
+    /** 跨日时更新“今天”高亮基准；每帧调用一次，日期未变时只做比较、无副作用。 */
+    func refreshToday(now: DateTimeParts): Unit {
+        if (now.year != today.year || now.month != today.month || now.day != today.day) {
+            today = now
+        }
     }
 
     func isToday(day: Int64): Bool {

@@ -175,4 +175,8 @@ public class Flexible <: Widget {
     public func flexWeight(): Float32 {
         weight
     }
+
+    public func focusableId(): ?String {
+        child.focusableId()
+    }
 }

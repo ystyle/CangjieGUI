@@ -8,11 +8,10 @@ package cui_calculator
 
 import cui.State
 
-/* 数值边界：显示位数上限、除零判定阈值与整数显示阈值。 */
+/* 数值边界：显示位数上限、整数吸附阈值与整数显示范围。除零判定用精确的 == 0.0。 */
 struct Limit {
     static let DIGITS: Int64 = 15
     static let PERCENT: Float64 = 100.0
-    static let DIVIDE_EPSILON: Float64 = 0.0000001
     static let INTEGER_EPSILON: Float64 = 0.000001
     /* 超出 Int64 精确范围的值保持浮点显示，避免转换溢出。 */
     static let INTEGER_RANGE: Float64 = 1.0e15

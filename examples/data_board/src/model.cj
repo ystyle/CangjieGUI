@@ -45,11 +45,11 @@ class BoardModel {
         filterTasks(done.value, filter.value)
     }
 
-    /** 向指定列追加一张新卡；整列替换以触发状态通知。 */
-    func addTask(column: State<Array<Task>>, category: String): Unit {
+    /** 向指定列追加一张新卡；整列替换以触发状态通知。新卡负责人统一为“待分派”。 */
+    func addTask(column: State<Array<Task>>): Unit {
         let id = nextId
         nextId += 1
-        let task = Task(id, "新任务 #${id}", category, ["待细化"], "待排期", mine: true)
+        let task = Task(id, "新任务 #${id}", "待分派", ["待细化"], "待排期", mine: true)
         let current = column.value
         let appended = Array<Task>(current.size + 1, {
             index => if (index < current.size) {

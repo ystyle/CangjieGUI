@@ -33,7 +33,9 @@ func cancelNewFile(model: NotepadModel): Unit {
 
 private func resetBuffer(model: NotepadModel): Unit {
     model.body.value = ""
+    // 光标与锚点一起归零：只动光标会留下跨越全文的幻影选区（见 NotepadModel 注释）。
     model.bodyCursor.value = 0
+    model.bodyAnchor.value = 0
     model.currentPath.value = ""
     model.status.value = "已新建空白文档"
 }
@@ -70,7 +72,10 @@ func loadDroppedFile(model: NotepadModel, path: String): Unit {
 func loadFile(model: NotepadModel, path: String, message: String): Unit {
     try {
         model.body.value = String.fromUtf8(File.readFrom(Path(path)))
+        // 光标与锚点一起移到文末：只动光标会让新文档呈现从旧锚点到文末的幻影选区，
+        // 下一次键入会直接吞掉这段内容。
         model.bodyCursor.value = model.body.value.size
+        model.bodyAnchor.value = model.body.value.size
         model.currentPath.value = path
         model.status.value = message
     } catch (e: Exception) {

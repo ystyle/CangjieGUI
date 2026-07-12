@@ -1,16 +1,25 @@
 package cui.controls
 
-import sdl.{MouseButton, Rect, Size, UiEvent}
-import cui.core.{Bindable, CUI_CONTROL_H, CUI_GAP, UiContext, Widget, buildChildren, drawSurface, emit}
+import sdl.{MouseButton, Rect, Size, UiEvent, clampF32}
+import cui.core.{Bindable, CUI_CONTROL_H, CUI_GAP, CursorShape, Spring, UiContext, Widget, buildChildren,
+    claimHoverIfInside, controlIdentity, drawSurface, emit, localState}
 
 public class SegmentedControl <: Widget {
     private let items: Array<String>
     private let selected: Bindable<Int64>
+    private let controlId: String
+    // The selection pill slides between segments. Retained across rebuilds and started at the
+    // current selection, so a static first frame is settled (snapshot-stable).
+    private let indicatorSpring: Spring
     private var frame = Rect.zero()
 
     public init(items: Array<String>, selected: Bindable<Int64>) {
         this.items = items
         this.selected = selected
+        let cid = controlIdentity("SegmentedControl")
+        this.controlId = cid
+        let start = Float32(clampIndex(selected.value, items.size))
+        this.indicatorSpring = localState<Spring>("${cid}:indicator") {Spring(start)}.value
         emit(this)
     }
 
@@ -28,15 +37,12 @@ public class SegmentedControl <: Widget {
             return
         }
         drawSurface(ctx, frame, ctx.theme.fieldSurface(false))
-        let segmentW = frame.w / Float32(items.size)
-        var i: Int64 = 0
-        while (i < items.size) {
-            drawSegment(ctx, i, Rect(frame.x + Float32(i) * segmentW, frame.y, segmentW, frame.h))
-            i += 1
-        }
+        let target = Float32(clampIndex(selected.value, items.size))
+        drawSlidingSegments(ctx, frame, items, indicatorSpring.animate(target: target, deltaMs: ctx.frame.deltaMs))
     }
 
-    public func handle(_: UiContext, event: UiEvent): Bool {
+    public func handle(ctx: UiContext, event: UiEvent): Bool {
+        claimHoverIfInside(ctx, event, frame, controlId, CursorShape.Interactive)
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y) && items.size > 0) {
@@ -48,22 +54,14 @@ public class SegmentedControl <: Widget {
         }
         false
     }
-
-    private func drawSegment(ctx: UiContext, i: Int64, rect: Rect): Unit {
-        if (i == clampIndex(selected.value, items.size)) {
-            let pill = rect.inset(3.0)
-            drawSurface(ctx, pill, ctx.theme.selectedSurface())
-            ctx.renderer.textCenter(items[i], rect, ctx.theme.accentText)
-        } else {
-            ctx.renderer.textCenter(items[i], rect, ctx.theme.text)
-        }
-    }
 }
 
 public class TabView <: Widget {
     private let labels: Array<String>
     private let selected: Bindable<Int64>
     private let pages: Array<Widget>
+    private let controlId: String
+    private let indicatorSpring: Spring
     private var frame = Rect.zero()
     private var laidOutPage: Int64 = -1
 
@@ -71,6 +69,12 @@ public class TabView <: Widget {
         this.labels = labels
         this.selected = selected
         this.pages = buildChildren(body)
+        let cid = controlIdentity("TabView")
+        this.controlId = cid
+        // The active-tab indicator slides between tabs; started at the current tab so a static
+        // first frame is settled (snapshot-stable).
+        let start = Float32(clampIndex(selected.value, labels.size))
+        this.indicatorSpring = localState<Spring>("${cid}:indicator") {Spring(start)}.value
         emit(this)
     }
 
@@ -92,6 +96,9 @@ public class TabView <: Widget {
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
+        // Only the tab strip is a click target; pages claim their own hover shapes.
+        claimHoverIfInside(ctx, event, Rect(frame.x, frame.y, frame.w, CUI_CONTROL_H), controlId,
+            CursorShape.Interactive)
         if (handleTabs(event)) {
             ensureActivePageLayout(ctx)
             return true
@@ -144,18 +151,8 @@ public class TabView <: Widget {
         }
         let header = Rect(frame.x, frame.y, frame.w, CUI_CONTROL_H)
         drawSurface(ctx, header, ctx.theme.fieldSurface(false))
-        let tabW = frame.w / Float32(labels.size)
-        var i: Int64 = 0
-        while (i < labels.size) {
-            let rect = Rect(frame.x + Float32(i) * tabW, frame.y, tabW, CUI_CONTROL_H)
-            if (i == clampIndex(selected.value, labels.size)) {
-                drawSurface(ctx, rect.inset(3.0), ctx.theme.selectedSurface())
-                ctx.renderer.textCenter(labels[i], rect, ctx.theme.accentText)
-            } else {
-                ctx.renderer.textCenter(labels[i], rect, ctx.theme.text)
-            }
-            i += 1
-        }
+        let target = Float32(clampIndex(selected.value, labels.size))
+        drawSlidingSegments(ctx, header, labels, indicatorSpring.animate(target: target, deltaMs: ctx.frame.deltaMs))
     }
 
     private func handleTabs(event: UiEvent): Bool {
@@ -170,6 +167,28 @@ public class TabView <: Widget {
             case _ => ()
         }
         false
+    }
+}
+
+// Draws a segmented row's selection pill and labels, with the pill slid to `animatedIndex` (a
+// fractional segment index). The label the pill mostly covers is drawn in the accent-on text
+// colour; the pill is clamped to the row so a spring overshoot never escapes the control.
+private func drawSlidingSegments(ctx: UiContext, row: Rect, items: Array<String>, animatedIndex: Float32): Unit {
+    let count = items.size
+    let segmentW = row.w / Float32(count)
+    let clamped = clampF32(animatedIndex, 0.0, Float32(count - 1))
+    drawSurface(ctx, Rect(row.x + clamped * segmentW, row.y, segmentW, row.h).inset(3.0), ctx.theme.selectedSurface())
+    let highlighted = Int64(clamped + 0.5)
+    var i: Int64 = 0
+    while (i < count) {
+        let cell = Rect(row.x + Float32(i) * segmentW, row.y, segmentW, row.h)
+        let color = if (i == highlighted) {
+            ctx.theme.accentText
+        } else {
+            ctx.theme.text
+        }
+        ctx.renderer.textCenter(items[i], cell, color)
+        i += 1
     }
 }
 

@@ -65,9 +65,10 @@ protected func replaceLastEmission(original: Widget, replacement: Widget): Unit 
         }
         i -= 1
     }
-    if (!block.isEmpty()) {
-        block[block.size - 1] = replacement
-    }
+    // The original was never emitted into this block (a stored widget decorated inside a
+    // later block). Append the decorated node at the decoration point — overwriting the
+    // last element here would silently destroy an unrelated sibling.
+    block.add(replacement)
 }
 
 /*
@@ -156,6 +157,71 @@ protected func controlIdentity(base: String): String {
     match (activeStateStore) {
         case Some(store) => store.uniqueControlId(base)
         case None => base
+    }
+}
+
+/*
+ * Records `id` as a keyboard-focus stop in build (declaration) order. Focusable controls
+ * call this once their identity is known, so the shell can walk them with Tab / Shift+Tab.
+ * Outside a build it is a no-op, keeping headless widget construction side-effect free.
+ */
+protected func registerFocusable(id: String): Unit {
+    match (activeStateStore) {
+        case Some(store) => store.registerFocusable(id)
+        case None => ()
+    }
+}
+
+/** Assigns a build-order identity and registers it as a focus stop in one step. */
+protected func focusableControlIdentity(base: String): String {
+    let id = controlIdentity(base)
+    registerFocusable(id)
+    id
+}
+
+/** Drops `id` from the current build's focus ring (no-op outside a build). */
+protected func unregisterFocusable(id: String): Unit {
+    match (activeStateStore) {
+        case Some(store) => store.unregisterFocusable(id)
+        case None => ()
+    }
+}
+
+/** The number of focus stops the current build has registered so far (0 outside a build). */
+protected func focusableCountNow(): Int64 {
+    match (activeStateStore) {
+        case Some(store) => store.focusableCount()
+        case None => 0
+    }
+}
+
+/** The focus stops registered since `start` in the current build; empty outside a build. */
+protected func focusablesSince(start: Int64): Array<String> {
+    match (activeStateStore) {
+        case Some(store) => store.focusablesFrom(start)
+        case None => []
+    }
+}
+
+/** Keeps the focus ring consistent when a control's `.id(...)` overrides its auto id. */
+protected func reregisterFocusable(previous: String, replacement: String): Unit {
+    match (activeStateStore) {
+        case Some(store) => store.reregisterFocusable(previous, replacement)
+        case None => ()
+    }
+}
+
+/*
+ * Claims the pointer shape for `id` when a MouseMove falls inside `frame`. Controls call
+ * this at the top of `handle` without consuming the event, so hover propagates to every
+ * layer and the shell resolves the top-most claim (see `UiContext.claimHover`).
+ */
+protected func claimHoverIfInside(ctx: UiContext, event: UiEvent, frame: Rect, id: String, shape: CursorShape): Unit {
+    match (event) {
+        case UiEvent.MouseMove(x, y) => if (frame.contains(x, y)) {
+            ctx.claimHover(id, shape)
+        }
+        case _ => ()
     }
 }
 

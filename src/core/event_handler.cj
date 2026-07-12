@@ -41,6 +41,22 @@ public class EventHandler <: Widget {
     public func isFlexible(): Bool {
         child.isFlexible()
     }
+
+    public func flexWeight(): Float32 {
+        child.flexWeight()
+    }
+
+    public func acceptsStretch(axis: Axis): Bool {
+        child.acceptsStretch(axis)
+    }
+
+    public func participatesInLayout(): Bool {
+        child.participatesInLayout()
+    }
+
+    public func focusableId(): ?String {
+        child.focusableId()
+    }
 }
 
 public class FrameHandler <: Widget {
@@ -77,5 +93,21 @@ public class FrameHandler <: Widget {
 
     public func isFlexible(): Bool {
         child.isFlexible()
+    }
+
+    public func flexWeight(): Float32 {
+        child.flexWeight()
+    }
+
+    public func acceptsStretch(axis: Axis): Bool {
+        child.acceptsStretch(axis)
+    }
+
+    public func participatesInLayout(): Bool {
+        child.participatesInLayout()
+    }
+
+    public func focusableId(): ?String {
+        child.focusableId()
     }
 }

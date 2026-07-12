@@ -47,7 +47,7 @@ func boardHeader(model: BoardModel): Unit {
             Switch("紧凑卡片", model.compact)
             Label("在制上限").muted().fontSize(FontSizes.CAPTION)
             Stepper("board.wip", model.wipLimit).range(2, 8)
-            Button("新增任务", {=> model.addTask(model.planned, "待分派")}).role(ButtonRole.Primary)
+            Button("新增任务", {=> model.addTask(model.planned)}).role(ButtonRole.Primary)
         }
     }.contentPadding(12.vp).flexible(false)
 }
@@ -71,7 +71,7 @@ func boardColumn(
                 task => taskCard(task, model.compact.value)
             }
             Spacer()
-            Button("添加到${title}", {=> model.addTask(column, title)}).fillWidth()
+            Button("添加到${title}", {=> model.addTask(column)}).fillWidth()
         }.spacing(10.vp)
     }.contentPadding(12.vp).style(columnSurface())
 }

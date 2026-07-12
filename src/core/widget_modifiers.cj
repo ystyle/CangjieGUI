@@ -120,7 +120,13 @@ class ModifiedWidget <: Widget {
     public func handle(ctx: UiContext, event: UiEvent): Bool {
         match (modifier) {
             case WidgetModifier.Visible(isVisible) => isVisible && child.handle(ctx, event)
-            case WidgetModifier.Enabled(isEnabled) => isEnabled && child.handle(ctx, event)
+            case WidgetModifier.Enabled(isEnabled) =>
+                // Disabled suppresses input, not time: the per-frame tick still flows, so a
+                // wrapped Frame hook (e.g. dialog polling) keeps running while greyed out.
+                match (event) {
+                    case UiEvent.Frame(_) => child.handle(ctx, event)
+                    case _ => isEnabled && child.handle(ctx, event)
+                }
             case _ => child.handle(ctx, event)
         }
     }
@@ -175,6 +181,10 @@ class ModifiedWidget <: Widget {
             case WidgetModifier.Visible(isVisible) => isVisible && child.participatesInLayout()
             case _ => child.participatesInLayout()
         }
+    }
+
+    public func focusableId(): ?String {
+        child.focusableId()
     }
 
     /** Resolves an exact-size length, clamped to non-negative logical pixels. */

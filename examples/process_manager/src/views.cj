@@ -9,13 +9,13 @@
 package cui_process_manager
 
 import cui.{ButtonRole, FontSizes, ForEach, HStack, IconButton, IconName, Label, LengthUnits, Panel, ProgressBar,
-    Spacer, TabView, TextArea, VStack}
+    Spacer, TabView, Table, TableColumn, VStack}
 
 func processView(model: ProcessModel, worker: RefreshWorker, facts: Array<SystemFact>): Unit {
     VStack {
         toolbar(model, worker)
         TabView(["进程", "概览"], model.tab) {
-            TextArea("process.output", model.output).scrollState(model.outputScroll).editable(false)
+            processPage(model)
             summaryPage(model, facts)
         }
     }.padding(14.vp)
@@ -35,6 +35,31 @@ func toolbar(model: ProcessModel, worker: RefreshWorker): Unit {
                 .fontSize(FontSizes.CAPTION)
         }
     }.contentPadding(10.vp).flexible(false)
+}
+
+/*
+ * 进程页：把 tasklist 快照展示为可排序的数据表格（映像名称/PID/会话名/内存 KB）。
+ * 快照尚未到达或采集出错时表格为空，回退成一行状态文本，保留错误可见性。
+ */
+func processPage(model: ProcessModel): Unit {
+    let rows = model.processRows.value
+    if (rows.isEmpty()) {
+        Panel {
+            Label(model.output.value).muted()
+        }.contentPadding(12.vp).flex()
+    }
+    if (!rows.isEmpty()) {
+        Table("process.table", processColumns(), rows, model.selectedRow).flex()
+    }
+}
+
+func processColumns(): Array<TableColumn> {
+    [
+        TableColumn("映像名称", 260.0),
+        TableColumn("PID", 100.0, numeric: true),
+        TableColumn("会话名", 160.0),
+        TableColumn("内存 (KB)", 140.0, numeric: true)
+    ]
 }
 
 // 刷新进行中的提示优先；空闲时显示距上次快照上屏过去了多久。

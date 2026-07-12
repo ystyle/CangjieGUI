@@ -88,7 +88,7 @@ public class IconButton <: Widget {
         this.onClick = onClick
         // The build-order identity keeps several icon-only buttons in one view distinct;
         // a shared id would let one button swallow the release meant for another.
-        this.controlId = controlIdentity(match (label) {
+        this.controlId = focusableControlIdentity(match (label) {
             case Some(value) => "IconButton:${value}"
             case None => "IconButton"
         })
@@ -104,6 +104,7 @@ public class IconButton <: Widget {
         if (value.isEmpty()) {
             throw IllegalArgumentException("IconButton id must not be empty")
         }
+        reregisterFocusable(controlId, value)
         controlId = value
         this
     }
@@ -151,9 +152,13 @@ public class IconButton <: Widget {
                     pointSize: FontSizes.CONTROL)
             case None => ()
         }
+        if (ctx.showFocusRing(controlId)) {
+            drawFocusRing(ctx, frame, ctx.theme.controlRadius)
+        }
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
+        claimHoverIfInside(ctx, event, frame, controlId, CursorShape.Interactive)
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
@@ -181,6 +186,10 @@ public class IconButton <: Widget {
             case _ => ()
         }
         false
+    }
+
+    public func focusableId(): ?String {
+        Some(controlId)
     }
 
     private func iconFrame(): Rect {
@@ -215,10 +224,9 @@ public class IconButton <: Widget {
                         } else if (frame.contains(ctx.mouseX, ctx.mouseY)) {
                             style = style.withFill(ctx.theme.fieldActive)
                         }
-                        // A keyboard-operable control shows where Enter/Space will land.
-                        if (ctx.hasFocus(controlId)) {
-                            style = style.withBorder(ctx.theme.accent)
-                        }
+                        // The focus ring (drawn in draw() on keyboard focus) shows where
+                        // Enter/Space will land — same convention as Button: a pointer
+                        // press must not leave a keyboard-style accent border behind.
                         style
                     case _ => base
                 }

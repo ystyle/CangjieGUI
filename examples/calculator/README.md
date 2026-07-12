@@ -5,8 +5,8 @@
 
 ## 你将学到
 
-- 用 `Flexible` 权重构成严格对齐的键盘网格，“0”键如何精确横跨两列
-- 用枚举替代字符串标签：按键、运算符全部 `match` 穷尽，新增按键时编译器强制补全分支
+- 用 `.flex(weight)` 权重构成严格对齐的键盘网格，“0”键如何精确横跨两列
+- 用枚举替代字符串标签：按键行为的 `match` 穷尽，新增按键时编译器强制补全 `press` 分支
 - `EventHandler` 把键盘输入翻译成与鼠标点击完全相同的动作
 - 除零、`Int64` 溢出、错误态恢复三类数值保护的写法
 
@@ -38,8 +38,8 @@ HStack {
 
 ### 枚举化按键：一处映射，处处穷尽
 
-按键身份、标题、角色、样式全部围绕 `CalcKey` 展开。`keyStyle`、`keyRole`、`press` 三个
-`match` 都是穷尽匹配——增删按键时漏掉任何一处都无法编译：
+按键身份、标题、角色、样式全部围绕 `CalcKey` 展开。`press` 与 `caption` 的 `match` 是穷尽匹配——
+增删按键时漏掉分支就无法编译；`keyStyle`/`keyRole` 则用 `case _` 兜底通用样式：
 
 ```cangjie
 case CalcKey.Op(_) => Some(operatorKeySurface())

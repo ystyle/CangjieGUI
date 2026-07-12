@@ -7,9 +7,13 @@
 
 - 文件对话框的“发起请求 → 帧内轮询”异步模式，事件循环永不阻塞
 - 为什么“新建”确认不用系统弹窗，而是状态驱动的应用内确认条
-- `map` 派生文档统计（“N 行 · M 字节”），状态栏与内容永远同步
+- `map` 派生文档统计（“| N 行 | M 字节 | UTF-8”），状态栏与内容永远同步
 - 长路径在状态栏里用 `Flexible` + 自动省略号安全展示
-- Ctrl 快捷键分发与命名按键常量
+- 文件级 Ctrl 快捷键分发；`Ctrl+A/C/X/V` 下放给聚焦的 `TextArea`，由框架内建的多行选区
+  剪贴板处理（选区复制/剪切、光标处粘贴、全选），工具栏“复制”按钮则显式复制全文
+- `Ctrl+Z` 撤销、`Ctrl+Y`/`Ctrl+Shift+Z` 重做：由 `TextArea` 内建的时间合并撤销历史提供，
+  连续键入整组回退，无需应用维护任何编辑历史
+- 工具栏图标按钮用 `Tooltip` 包裹：悬停停留后显示动作说明与快捷键（如“保存 · Ctrl+S”）
 
 ## 文件结构
 
@@ -21,7 +25,7 @@
 | [dialogs.cj](src/dialogs.cj) | 打开/保存对话框的发起与逐帧轮询 |
 | [file_actions.cj](src/file_actions.cj) | 新建/保存/加载与拖放落盘 |
 | [clipboard_actions.cj](src/clipboard_actions.cj) | 复制/粘贴 |
-| [shortcuts.cj](src/shortcuts.cj) | 快捷键映射（Ctrl+N/O/S/C/V） |
+| [shortcuts.cj](src/shortcuts.cj) | 文件级快捷键（Ctrl+N/O/S）；Ctrl+A/C/X/V 交由编辑区自身选区剪贴板处理 |
 | [theme.cj](src/theme.cj) | 主题、元数据、SDL 提示与确认条警示表面 |
 
 ## 关键实现讲解
@@ -52,7 +56,7 @@ func newFile(model: NotepadModel): Unit {
 this.stats = this.body.map<String>({text => ... 行数与字节数 ...})
 ```
 
-编辑任何字符，状态栏的“N 行 | M 字节”随下一帧自动更新，无需手工同步。
+编辑任何字符，状态栏的“| N 行 | M 字节 | UTF-8”随下一帧自动更新，无需手工同步。
 
 ### 长路径不挤压统计
 

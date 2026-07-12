@@ -36,6 +36,17 @@ public struct Color {
     public func withAlpha(alpha: Int64): Color {
         Color(r, g, b, toByte(alpha))
     }
+
+    /** Linearly interpolates toward `other`; `t` is clamped to `[0, 1]`. */
+    public func lerp(other: Color, t: Float32): Color {
+        let k = clampF32(t, 0.0, 1.0)
+        Color.rgba(mixChannel(r, other.r, k), mixChannel(g, other.g, k), mixChannel(b, other.b, k),
+            mixChannel(a, other.a, k))
+    }
+}
+
+private func mixChannel(from: UInt8, to: UInt8, t: Float32): Int64 {
+    Int64(Float32(from) + (Float32(to) - Float32(from)) * t)
 }
 
 /**

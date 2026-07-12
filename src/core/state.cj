@@ -123,23 +123,24 @@ public class State<T> <: Bindable<T> {
     }
 
     public func observe(callback: (T, T) -> Unit): StateObservation<T> {
-        compactListeners()
         let listener = StateListener<T>(callback)
         listeners.add(listener)
         StateObservation<T>({=> listener.isActive = false})
     }
 
     private func notify(previous: T, current: T): Unit {
-        // Listeners added by a callback are not notified for this assignment; listeners
-        // cancelled by a callback are skipped via their isActive flag.
-        let count = listeners.size
-        var i: Int64 = 0
-        while (i < count) {
-            let listener = listeners[i]
+        if (listeners.isEmpty()) {
+            return
+        }
+        // Iterate a snapshot: a callback may cancel observations or register new ones
+        // (a re-subscribe pattern), which would otherwise shift a live index walk.
+        // Listeners added by a callback see only later assignments; cancelled ones are
+        // skipped via isActive. Compaction of cancelled entries runs after the loop.
+        let snapshot = listeners.toArray()
+        for (listener in snapshot) {
             if (listener.isActive) {
                 listener.callback(previous, current)
             }
-            i += 1
         }
         compactListeners()
     }
@@ -187,6 +188,7 @@ public class StateStore {
     private let addedDuringBuild = ArrayList<String>()
     private let scopes = ArrayList<String>()
     private let controlIdCounts = HashMap<String, Int64>()
+    private let focusOrder = ArrayList<String>()
 
     /**
      * Returns the state at the current scope and key, creating it on first use.
@@ -226,6 +228,7 @@ public class StateStore {
         addedDuringBuild.clear()
         scopes.clear()
         controlIdCounts.clear()
+        focusOrder.clear()
     }
 
     func finishBuild(): Unit {
@@ -280,6 +283,80 @@ public class StateStore {
         } else {
             "${path}#${seen + 1}"
         }
+    }
+
+    /*
+     * Records a control that can hold keyboard focus, in build (declaration) order. The
+     * shell reads this list after each build to move focus with Tab / Shift+Tab. Like the
+     * control-id counters it is rebuilt every frame, so the traversal order tracks the
+     * declared tree without any retained widget references.
+     */
+    func registerFocusable(id: String): Unit {
+        // A duplicate id (two controls given the same explicit id) registers once: the
+        // first-match search in moveFocus would otherwise bounce between the twin
+        // entries forever and Tab could never leave them.
+        if (!focusOrder.contains(id)) {
+            focusOrder.add(id)
+        }
+    }
+
+    /*
+     * Replaces a previously registered focus id with an explicit one. A control registers
+     * its build-order id in its constructor; a chained `.id(...)` overrides that id and
+     * calls this so the ring stays consistent with what the control checks in `hasFocus`.
+     * The auto id is almost always the last entry, so the search from the end is O(1).
+     */
+    func reregisterFocusable(previous: String, replacement: String): Unit {
+        removeFocusable(replacement) // keep the no-duplicate invariant on id collisions
+        var i = focusOrder.size - 1
+        while (i >= 0) {
+            if (focusOrder[i] == previous) {
+                focusOrder[i] = replacement
+                return
+            }
+            i -= 1
+        }
+        focusOrder.add(replacement)
+    }
+
+    /** Removes `id` from this build's ring — a control disabled by `.enabled(false)` leaves Tab traversal. */
+    func unregisterFocusable(id: String): Unit {
+        removeFocusable(id)
+    }
+
+    private func removeFocusable(id: String): Unit {
+        var i = focusOrder.size - 1
+        while (i >= 0) {
+            if (focusOrder[i] == id) {
+                focusOrder.remove(at: i)
+                return
+            }
+            i -= 1
+        }
+    }
+
+    /** The focusable control ids gathered by the most recent build, in traversal order. */
+    protected func focusRing(): Array<String> {
+        focusOrder.toArray()
+    }
+
+    /** Number of focus stops registered so far in this build; see `focusablesFrom`. */
+    func focusableCount(): Int64 {
+        focusOrder.size
+    }
+
+    /*
+     * The focus stops registered at or after `start`, in declaration order. An overlay
+     * host (Modal) snapshots the count before building its subtree and takes this slice
+     * after, giving it the focus stops that live inside the dialog — the scope its Tab
+     * trap cycles through.
+     */
+    func focusablesFrom(start: Int64): Array<String> {
+        if (start >= focusOrder.size) {
+            return []
+        }
+        let from = max(0, start)
+        Array<String>(focusOrder.size - from, {i => focusOrder[from + i]})
     }
 
     private func scopedKey(key: String): String {

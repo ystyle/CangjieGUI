@@ -3,6 +3,35 @@ package cui.text
 private let UTF8_CONTINUATION_LOW: UInt8 = UInt8(128)
 private let UTF8_CONTINUATION_HIGH: UInt8 = UInt8(192)
 private let NEWLINE_BYTE: UInt8 = UInt8(10)
+private let TAB_BYTE: UInt8 = UInt8(9)
+private let CR_BYTE: UInt8 = UInt8(13)
+private let SPACE_BYTE: UInt8 = UInt8(32)
+private let UNDERSCORE_BYTE: UInt8 = UInt8(95)
+
+// Character class of the rune beginning at `index`, used to grow a double-click selection:
+// 0 word (ASCII alphanumeric, underscore, or any non-ASCII rune such as CJK), 1 whitespace,
+// 2 other (ASCII punctuation and symbols). Reading the leading byte is enough — a multi-byte
+// rune is always a non-ASCII "word" character here, and ASCII bytes classify directly.
+internal func charClassAt(text: String, index: Int64): Int64 {
+    let byte = text[index]
+    if (byte >= UTF8_CONTINUATION_LOW) {
+        return 0
+    }
+    if (isAsciiWordByte(byte)) {
+        return 0
+    }
+    if (byte == SPACE_BYTE || byte == TAB_BYTE || byte == NEWLINE_BYTE || byte == CR_BYTE) {
+        return 1
+    }
+    2
+}
+
+private func isAsciiWordByte(byte: UInt8): Bool {
+    (byte >= UInt8(48) && byte <= UInt8(57)) || // 0-9
+        (byte >= UInt8(65) && byte <= UInt8(90)) || // A-Z
+        (byte >= UInt8(97) && byte <= UInt8(122)) || // a-z
+        byte == UNDERSCORE_BYTE
+}
 
 internal func normalizedTextCursor(text: String, cursor: Int64): Int64 {
     var current = clampTextCursor(text, cursor)

@@ -9,6 +9,16 @@ public enum ImageFit {
     | Cover
 }
 
+/*
+ * Displays an image loaded from a file. The decoded texture is cached on the instance and freed
+ * in `close()`, so — unlike springs/scroll offsets that persist by control identity — an ImageView
+ * must be **hoisted out of the per-frame rebuild** and registered as a resource, or it reloads
+ * from disk every frame and leaks the previous texture. Build it once and hand it to the app:
+ *
+ *   let badge = ImageView(path)   // created once, outside app.run
+ *   app.manage(badge)            // freed on shutdown
+ *   app.run { ... badge ... }    // referenced by the per-frame tree
+ */
 public class ImageView <: Widget & Resource {
     private let path: String
     private var imageFit: ImageFit
@@ -16,6 +26,7 @@ public class ImageView <: Widget & Resource {
     private let preferredHeight: Length
     private var frame = Rect.zero()
     private var texture: ?Texture = None
+    private var loadFailed = false
     private var closed = false
 
     public init(
@@ -55,14 +66,17 @@ public class ImageView <: Widget & Resource {
         if (closed) {
             return
         }
-        let image = textureFor(ctx.renderer)
-        let destination = fittedRect(Size(image.width, image.height), frame, imageFit)
-        match (imageFit) {
-            case ImageFit.Cover =>
-                ctx.renderer.pushClip(frame)
-                ctx.renderer.texture(image, destination)
-                ctx.renderer.popClip()
-            case _ => ctx.renderer.texture(image, destination)
+        match (textureFor(ctx.renderer)) {
+            case Some(image) =>
+                let destination = fittedRect(Size(image.width, image.height), frame, imageFit)
+                match (imageFit) {
+                    case ImageFit.Cover =>
+                        ctx.renderer.pushClip(frame)
+                        ctx.renderer.texture(image, destination)
+                        ctx.renderer.popClip()
+                    case _ => ctx.renderer.texture(image, destination)
+                }
+            case None => () // missing/undecodable image: draw nothing rather than crash the frame loop
         }
     }
 
@@ -86,14 +100,25 @@ public class ImageView <: Widget & Resource {
         texture = None
     }
 
-    private func textureFor(renderer: Renderer): Texture {
+    private func textureFor(renderer: Renderer): ?Texture {
         match (texture) {
-            case Some(image) => image
+            case Some(image) => Some(image)
             case None =>
-                let loaded = renderer.loadTexture(path)
-                loaded.setBlendMode(TextureBlendMode.Blend)
-                texture = Some(loaded)
-                loaded
+                if (loadFailed) {
+                    return None
+                }
+                // A missing or corrupt file (or a headless renderer) must not throw out of
+                // draw and kill the frame loop; remember the failure so it is not retried —
+                // and does not hit the disk — every frame.
+                try {
+                    let loaded = renderer.loadTexture(path)
+                    loaded.setBlendMode(TextureBlendMode.Blend)
+                    texture = Some(loaded)
+                    Some(loaded)
+                } catch (_: Exception) {
+                    loadFailed = true
+                    None
+                }
         }
     }
 }

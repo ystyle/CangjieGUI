@@ -35,21 +35,48 @@
 
 ### [`process_manager`](process_manager/README.md)：进程管理器
 
-展示 `spawn` 后台任务、由互斥锁保护的结果邮箱、后台异常兜底回传、逐帧收集结果、只读滚动
-文本、`TabView`，以及 CPU、显示器和电源信息查询。耗时系统命令不会阻塞 UI 线程，子进程
-输出使用受检 UTF-8 解码。
+展示 `spawn` 后台任务、由互斥锁保护的结果邮箱、后台异常兜底回传、逐帧收集结果、把
+`tasklist` CSV 解析成可排序的 `Table` 进程表、`TabView`，以及 CPU、显示器和电源信息查询。
+耗时系统命令不会阻塞 UI 线程，子进程输出使用受检 UTF-8 解码。
 
-### [`focus_planner`](focus_planner/README.md)：专注规划台
+### [`planner`](planner/README.md)：专注规划台
 
-展示 `Grid` 指标卡、`FlowRow` 标签、`ZStack` 叠层进度、`ScrollView`、`Keyed`、`rememberState`、
-`DerivedState` 进度文本、`maxLines` 文本换行，以及 `Switch`、`RadioButton`、`Picker`、`Stepper`
-等桌面控件。界面包含概览和偏好设置两个实用场景。
+展示 `Grid` 指标卡、`FlowRow` 标签、`ProgressBar` 动画进度、`ScrollView`、`Keyed`、`rememberState`、
+`maxLines` 文本换行，以及 `Switch`（弹簧动画拨动）、`RadioButton`、
+`Dropdown`、`ComboBox`（可编辑下拉城市）、`Stepper` 等桌面控件。界面包含概览和偏好设置两个实用场景。
 
-### [`kanban_board`](kanban_board/README.md)：产品看板
+### [`data_board`](data_board/README.md)：产品看板
 
 展示单一数据源驱动的三列 `Grid` 看板：列头计数由 `derive` 派生、卡片列表由 `ForEach` 按任务
 id 维持身份、筛选器实时作用于三列、新增按钮真正追加卡片、在制上限超出时列头切换警示色，
 以及流式标签、动态紧凑卡片和完整链式样式。
+
+### [`command_palette`](command_palette/README.md)：命令面板
+
+一个键盘驱动的模糊命令启动器（类似编辑器 Ctrl+P）：`TextField.autofocus()` 打开即聚焦搜索、
+`DerivedState` 派生的结果条数、`State.observe` 在查询变化时归零高亮，以及“焦点在搜索框、
+`↑/↓/回车` 却在应用根部拦截以操控列表”的经典命令面板交互。综合演示自动聚焦、文本选区/撤销、
+`ListView` 高亮与深色浮层主题。
+
+### [`notes`](notes/README.md)：主从式笔记
+
+左列表 + 右编辑器的主从应用：用 `notes.project` 把 `TextArea` 双向绑定到选中笔记的正文（单一
+数据源、无同步缓冲），编辑器 id 含笔记 id 实现按笔记独立的光标与撤销。综合演示 `ListView` 键盘
+导航、文本选区/撤销、`Tooltip`、`ContextMenu` 右键菜单（新建/复制/删除）、删除走 `Modal` 模态确认，
+以及首行标题（每帧计算）与字节统计的 `derive`。
+
+### [`data_table`](data_table/README.md)：数据表格
+
+一张服务器机群监控表，演示 `Table` 控件：多列、固定表头、窗口化滚动、点击列头排序（数值列
+`numeric: true` 按数值而非字典序、右对齐）、行选择以原始行索引存储故排序后仍跟随同一行、`Tab`
+聚焦后 `↑/↓/Home/End` 键盘导航，以及选中行详情由 `State.map` 派生实时刷新。
+
+### [`contacts`](contacts/README.md)：通讯录（CRM）
+
+一个小而完整的增删改查界面，把 `Table`、`ComboBox`、`ContextMenu`、`Modal`、`TextField` 组合到真实
+场景：可排序联系人表格、组合框搜索、右键与工具栏共享的编辑/删除、录入表单与删除确认两个模态框
+（承载真实控件子树），以及“姓名非空才可保存”的表单校验、随选择启用的按钮、过滤即归零选择。
+既是这些控件的端到端集成测试，也是最佳实践参考。
 
 ## 运行方式
 

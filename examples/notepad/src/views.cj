@@ -10,7 +10,7 @@
 package cui_notepad
 
 import cui.{Axis, Button, ButtonRole, Checkbox, DesktopApp, Divider, EventHandler, Flexible, FontSizes, HStack,
-    IconButton, IconName, Label, LengthUnits, Panel, Spacer, TextAlign, TextArea, VStack}
+    IconButton, IconName, Label, LengthUnits, Panel, Spacer, TextAlign, TextArea, Tooltip, VStack}
 
 func notepadView(model: NotepadModel, app: DesktopApp, documentPath: String): Unit {
     EventHandler(onEvent: {event => handleNotepadEvent(event, model, app, documentPath)}) {
@@ -19,10 +19,16 @@ func notepadView(model: NotepadModel, app: DesktopApp, documentPath: String): Un
             if (model.confirmingNew.value) {
                 confirmNewBar(model)
             }
-            TextArea("notepad.body", model.body)
-                .scrollState(model.bodyScroll)
-                .cursorState(model.bodyCursor)
-                .editable(!model.readOnly.value)
+            // editable 是构造参数（而非修饰符）：TextArea 在构造时即决定是否注册 Tab 焦点，
+            // 因此只读编辑器不会进入焦点遍历序列。
+            TextArea(
+                "notepad.body",
+                model.body,
+                scroll: Some(model.bodyScroll),
+                cursor: Some(model.bodyCursor),
+                anchor: Some(model.bodyAnchor),
+                editable: !model.readOnly.value
+            )
             statusBar(model)
         }.spacing(10.vp).padding(14.vp)
     }
@@ -31,26 +37,38 @@ func notepadView(model: NotepadModel, app: DesktopApp, documentPath: String): Un
 func toolbar(model: NotepadModel, app: DesktopApp, documentPath: String): Unit {
     Panel {
         HStack {
-            IconButton(IconName.NewDocument) {
-                => newFile(model)
-            }.label("新建")
-            IconButton(IconName.OpenFolder) {
-                => openFile(model, app)
-            }.label("打开")
+            Tooltip(text: "新建文档 · Ctrl+N") {
+                IconButton(IconName.NewDocument) {
+                    => newFile(model)
+                }.label("新建")
+            }
+            Tooltip(text: "打开文件 · Ctrl+O") {
+                IconButton(IconName.OpenFolder) {
+                    => openFile(model, app)
+                }.label("打开")
+            }
             Divider().axis(Axis.Vertical)
-            IconButton(IconName.Save) {
-                => saveCurrentFile(model, documentPath)
-            }.label("保存").role(ButtonRole.Primary)
-            IconButton(IconName.SaveAs) {
-                => saveFileAs(model, app, documentPath)
-            }.label("另存为")
+            Tooltip(text: "保存 · Ctrl+S") {
+                IconButton(IconName.Save) {
+                    => saveCurrentFile(model, documentPath)
+                }.label("保存").role(ButtonRole.Primary)
+            }
+            Tooltip(text: "另存为 · Ctrl+Shift+S") {
+                IconButton(IconName.SaveAs) {
+                    => saveFileAs(model, app, documentPath)
+                }.label("另存为")
+            }
             Divider().axis(Axis.Vertical)
-            IconButton(IconName.Copy) {
-                => copyAll(model.body, model.status)
-            }.label("复制")
-            IconButton(IconName.Paste) {
-                => pasteClipboard(model.body, model.bodyCursor, model.status)
-            }.label("粘贴")
+            Tooltip(text: "复制全文") {
+                IconButton(IconName.Copy) {
+                    => copyAll(model.body, model.status)
+                }.label("复制")
+            }
+            Tooltip(text: "在光标处粘贴") {
+                IconButton(IconName.Paste) {
+                    => pasteClipboard(model.body, model.bodyCursor, model.bodyAnchor, model.status)
+                }.label("粘贴").enabled(!model.readOnly.value)
+            }
             Spacer()
             Checkbox("只读", model.readOnly)
         }

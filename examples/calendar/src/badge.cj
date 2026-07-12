@@ -1,6 +1,6 @@
 /*
  * 用 Surface 逐像素生成标题栏左侧的日历徽标，并存为 BMP 供 ImageView 加载。
- * 以显示尺寸的 2 倍绘制，ImageView 下采样后边缘更锐利。
+ * 以远高于显示尺寸的分辨率绘制（192×144，约为 40×30 vp 显示尺寸的数倍），ImageView 下采样后边缘更锐利。
  */
 package cui_calendar
 

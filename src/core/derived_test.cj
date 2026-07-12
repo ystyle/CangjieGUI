@@ -94,3 +94,36 @@ func setIfChangedSkipsEqualAssignments(): Unit {
     @Expect(notifications.value, Int64(1))
     observation.close()
 }
+
+// A callback that cancels observations and registers a new one DURING a notification must not
+// corrupt the walk: notify iterates a snapshot, skips cancelled listeners via isActive, and a
+// listener added mid-notification first sees the NEXT assignment.
+@Test
+func stateNotifySurvivesReentrantObserveAndClose(): Unit {
+    let state = State<Int64>(0)
+    let log = State<String>("")
+    let second = State<?StateObservation<Int64>>(None)
+    let third = State<?StateObservation<Int64>>(None)
+    let _ = state.observe({_, current =>
+        log.value = log.value + "a${current};"
+        match (second.value) {
+            case Some(observation) => observation.close()
+            case None => ()
+        }
+        match (third.value) {
+            case Some(observation) => observation.close()
+            case None => ()
+        }
+        let _ = state.observe({_, c => log.value = log.value + "n${c};"})
+    })
+    second.value = Some(state.observe({_, current => log.value = log.value + "b${current};"}))
+    third.value = Some(state.observe({_, current => log.value = log.value + "c${current};"}))
+
+    // The callback cancels b/c mid-walk and registers n: no crash, no b/c call, no n call yet.
+    state.value = 1
+    @Expect(log.value, "a1;")
+
+    // The next assignment reaches the survivors: the original listener plus the added one.
+    state.value = 2
+    @Expect(log.value, "a1;a2;n2;")
+}

@@ -1,10 +1,56 @@
 package cui.text
 
 import sdl.{Key, MouseButton, Rect, Renderer, UiEvent}
-import cui.core.{State, StateStore, Theme, UiContext, buildRoot}
+import cui.core.{CursorShape, State, StateStore, Theme, UiContext, buildRoot}
 
 private func textTestContext(): UiContext {
     UiContext(Renderer.headless(), Theme.light())
+}
+
+@Test
+func textAreaScrollbarThumbDragScrollsAndTakesPriorityOverTextDrag(): Unit {
+    let ctx = textTestContext()
+    let text = State<String>("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten")
+    let scroll = State<Float32>(0.0)
+    let area = TextArea("notes", text, scroll: Some(scroll))
+    area.layout(ctx, Rect(0.0, 0.0, 200.0, 100.0))
+
+    // Press in the scrollbar lane (right edge), not the text — then drag the thumb down.
+    @Expect(area.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 195.0, 6.0)))
+    ctx.leftMouseDown = true
+    @Expect(area.handle(ctx, UiEvent.MouseMove(195.0, 70.0)))
+    @Expect(scroll.value > Float32(0.0))
+    @Expect(text.value, "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten") // dragging the bar never edits
+}
+
+@Test
+func editableTextAreaRequestsTextCursorButReadOnlyDoesNot(): Unit {
+    let editableCtx = textTestContext()
+    let editable = TextArea("editable", State<String>("hi"))
+    editable.layout(editableCtx, Rect(0.0, 0.0, 200.0, 120.0))
+    editableCtx.beginHoverTest()
+    let _ = editable.handle(editableCtx, UiEvent.MouseMove(20.0, 20.0))
+    editableCtx.settleHover()
+    @Expect(editableCtx.desiredCursor() == CursorShape.Text)
+
+    let readOnlyCtx = textTestContext()
+    let readOnly = TextArea("readonly", State<String>("hi"), editable: false)
+    readOnly.layout(readOnlyCtx, Rect(0.0, 0.0, 200.0, 120.0))
+    readOnlyCtx.beginHoverTest()
+    let _ = readOnly.handle(readOnlyCtx, UiEvent.MouseMove(20.0, 20.0))
+    readOnlyCtx.settleHover()
+    @Expect(readOnlyCtx.desiredCursor() == CursorShape.Default)
+}
+
+@Test
+func editableTextAreaJoinsFocusRingButReadOnlyDoesNot(): Unit {
+    let editableStore = StateStore()
+    let _ = buildRoot({=> TextArea("editable", State<String>("hi"))}, editableStore)
+    @Expect(editableStore.focusRing().size, 1)
+
+    let readOnlyStore = StateStore()
+    let _ = buildRoot({=> TextArea("readonly", State<String>("hi"), editable: false)}, readOnlyStore)
+    @Expect(readOnlyStore.focusRing().size, 0)
 }
 
 @Test

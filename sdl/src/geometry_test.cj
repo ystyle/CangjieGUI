@@ -53,6 +53,21 @@ func rectIntersectionCoversOverlapContainmentAndDisjoint(): Unit {
 }
 
 @Test
+func colorLerpInterpolatesChannelsAndClampsT(): Unit {
+    let from = Color.rgba(0, 0, 0, 0)
+    let to = Color.rgba(100, 200, 40, 255)
+
+    let mid = from.lerp(to, 0.5)
+    @Expect(mid.r, UInt8(50))
+    @Expect(mid.g, UInt8(100))
+    @Expect(mid.b, UInt8(20))
+    @Expect(mid.a, UInt8(127))
+
+    @Expect(from.lerp(to, 2.0).r, UInt8(100)) // t clamps to 1
+    @Expect(from.lerp(to, -1.0).r, UInt8(0)) // t clamps to 0
+}
+
+@Test
 func clampF32HonorsBounds(): Unit {
     @Expect(clampF32(-3.0, 0.0, 2.0), Float32(0.0))
     @Expect(clampF32(1.5, 0.0, 2.0), Float32(1.5))

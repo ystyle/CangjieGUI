@@ -1,22 +1,22 @@
-# focus_planner：专注规划台
+# planner：专注规划台
 
-一个双页的效率工具界面，演示局部状态身份（`Keyed` + `rememberState`）、派生进度文本、
-文本换行，以及 `Grid`/`FlowRow`/`ZStack`/`ScrollView` 的组合布局。
+一个双页的效率工具界面，演示局部状态身份（`Keyed` + `rememberState`）、`maxLines` 文本换行，
+以及 `Grid`/`FlowRow`/`ScrollView` 的组合布局。
 
 ## 你将学到
 
 - 侧栏 + 内容区的桌面应用骨架：固定宽度导航、`flex()` 内容面板
 - `Keyed` 与 `rememberState` 的局部状态生命周期：切换页面卸载后按身份规则重置
-- `map` 派生的进度百分比文本与 `ZStack` 叠层进度条
+- `ProgressBar` 自带居中动画百分比：填充与数字由同一根弹簧驱动，永不失步
 - `maxLines` 让说明文字在窄侧栏内换行而不是溢出
-- 设置页的成组控件模式：`Stepper`、`Switch`、`RadioButton`、`Picker`
+- 设置页的成组控件模式：`Stepper`、`Switch`、`RadioButton`、`Dropdown`（下拉选择）、`ComboBox`（可编辑下拉，键入过滤或自定义城市）
 
 ## 文件结构
 
 | 文件 | 职责 |
 |---|---|
 | [main.cj](src/main.cj) | 入口：模型、窗口与最小尺寸 |
-| [model.cj](src/model.cj) | `PlannerModel`：页面、进度、偏好状态与派生百分比文本 |
+| [model.cj](src/model.cj) | `PlannerModel`：页面、进度与偏好状态 |
 | [views.cj](src/views.cj) | 全部视图：头部、导航、概览页、偏好页 |
 | [theme.cj](src/theme.cj) | 紫罗兰主题、卡片表面与共享字号令牌 |
 
@@ -34,17 +34,12 @@ Keyed("planner.quick_note") {
 }
 ```
 
-### 派生进度文本 + 叠层进度条
+### 进度条自带百分比
 
-百分比文本由 `completed` 派生，进度条与文本用 `ZStack` 叠放居中：
+`ProgressBar` 自身在中央绘制并动画百分比，直接绑定 `completed` 即可，无需再叠一层文字标签：
 
 ```cangjie
-this.percentText = this.completed.map<String>({value => "${Int64(value * 100.0)}%"})
-
-ZStack {
-    ProgressBar(model.completed).height(24.vp).fillWidth()
-    Label(model.percentText.value).textAlign(TextAlign.Center)
-}.alignment(Alignment.Center).height(26.vp)
+ProgressBar(model.completed).height(26.vp).fillWidth()
 ```
 
 ### 窄栏文字不溢出
@@ -68,7 +63,7 @@ let PLANNER_HEADING: Length = 17.fp
 ## 运行
 
 ```powershell
-cd examples/focus_planner
+cd examples/planner
 cjpm run
 ```
 

@@ -22,6 +22,16 @@ protected func drawSurface(ctx: UiContext, rect: Rect, style: SurfaceStyle): Uni
 }
 
 /*
+ * A keyboard focus ring: an accent rounded outline hugging the control, drawn a couple of pixels
+ * outside its bounds so it reads as a halo distinct from the control's own edge. Every focusable
+ * control paints one (gated on `showFocusRing`, so it shows for keyboard focus only), giving Tab
+ * navigation a uniform, visible indicator across buttons, toggles and fields alike.
+ */
+protected func drawFocusRing(ctx: UiContext, rect: Rect, radius: Float32): Unit {
+    ctx.renderer.strokeRoundedRect(rect.inset(-2.0), radius + 2.0, Pen(width: 1.6, color: ctx.theme.accent))
+}
+
+/*
  * A soft drop shadow drawn as two single-pass gradient halos: each layer is a rounded rect
  * whose edge fades across a wide feather, so the falloff is a smooth ramp with no banding.
  * The wide layer is the ambient penumbra, the tight one the contact darkening; the card is

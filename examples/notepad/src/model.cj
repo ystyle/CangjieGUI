@@ -10,7 +10,9 @@ import cui.{DerivedState, FileDialogRequest, State}
 
 class NotepadModel {
     let body = State<String>("欢迎使用 CUI 记事本。\n中文与 English 均使用系统 UI 字体清晰显示。")
+    /** 光标与选区锚点成对持有：任何外部改写光标的动作（载入、粘贴）必须同步移动锚点，否则残留锚点会形成幻影选区。 */
     let bodyCursor = State<Int64>(body.value.size)
+    let bodyAnchor = State<Int64>(body.value.size)
     let bodyScroll = State<Float32>(0.0)
     let currentPath = State<String>("")
     let status = State<String>("就绪")

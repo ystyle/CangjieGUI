@@ -35,6 +35,15 @@ public interface Widget {
         true
     }
 
+    /*
+     * The keyboard-focus id this widget registered during construction, or `None` for
+     * non-focusable widgets and multi-control containers. Single-child wrappers forward
+     * their child's id; `.enabled(false)` uses it to take the control out of Tab traversal.
+     */
+    func focusableId(): ?String {
+        None
+    }
+
     /** Constrains this widget to an exact width, e.g. `.width(160.vp)`. */
     func width(value: Length): Widget {
         applyModifier(this, WidgetModifier.Width(value))
@@ -170,8 +179,19 @@ public interface Widget {
         applyModifier(this, WidgetModifier.Visible(isVisible))
     }
 
-    /** Keeps this widget in layout and drawing while suppressing input events. */
+    /*
+     * Keeps this widget in layout and drawing while suppressing input events. A disabled
+     * control also leaves keyboard Tab traversal — a stop that ignores Enter/Space would
+     * be a dead end. Containers holding several focusables keep their subtree's stops;
+     * disable controls individually.
+     */
     func enabled(isEnabled: Bool): Widget {
+        if (!isEnabled) {
+            match (focusableId()) {
+                case Some(id) => unregisterFocusable(id)
+                case None => ()
+            }
+        }
         applyModifier(this, WidgetModifier.Enabled(isEnabled))
     }
 }

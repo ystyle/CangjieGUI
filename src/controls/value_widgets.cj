@@ -1,7 +1,8 @@
 package cui.controls
 
 import sdl.{FontSizes, Key, MouseButton, Pen, Rect, Size, UiEvent, clampF32}
-import cui.core.{Bindable, CUI_CONTROL_H, CUI_SMALL_H, Observable, UiContext, Widget, drawSurface, emit}
+import cui.core.{Bindable, CUI_CONTROL_H, CUI_SMALL_H, CursorShape, Observable, Spring, UiContext, Widget,
+    claimHoverIfInside, controlIdentity, drawSurface, emit, localState, registerFocusable}
 
 private let VALUE_CONTROL_W: Float32 = 180.0
 
@@ -9,12 +10,17 @@ public class ProgressBar <: Widget {
     private let value: Observable<Float32>
     private var lowerBound: Float32
     private var upperBound: Float32
+    private let fillSpring: Spring
     private var frame = Rect.zero()
 
     public init(value: Observable<Float32>, lower!: Float32 = 0.0, upper!: Float32 = 1.0) {
         this.value = value
         this.lowerBound = lower
         this.upperBound = upper
+        // The fill eases toward the value, so a jump slides rather than snaps. Retained across
+        // rebuilds and started at the current amount, so a static first frame is snapshot-stable.
+        let startAmount = normalizedAmount(value.get(), lower, upper)
+        this.fillSpring = localState<Spring>("${controlIdentity("ProgressBar")}:fill") {Spring(startAmount)}.value
         emit(this)
     }
 
@@ -35,10 +41,14 @@ public class ProgressBar <: Widget {
 
     public func draw(ctx: UiContext): Unit {
         let amount = normalizedAmount(value.get(), lowerBound, upperBound)
-        let fill = Rect(frame.x, frame.y, frame.w * amount, frame.h)
+        // Bar and percentage share the animated value, so both slide together toward the target.
+        // Clamped: the underdamped spring overshoots slightly, and the fill must not paint past
+        // the control's edge (nor the label read -0% / 101%).
+        let shown = clampF32(fillSpring.animate(target: amount, deltaMs: ctx.frame.deltaMs), 0.0, 1.0)
+        let fill = Rect(frame.x, frame.y, frame.w * shown, frame.h)
         drawSurface(ctx, frame, ctx.theme.fieldSurface(false))
         ctx.renderer.fillRoundedRect(fill, ctx.theme.smallRadius, ctx.theme.accent)
-        ctx.renderer.textCenter("${Int64(amount * 100.0)}%", frame, ctx.theme.text, pointSize: FontSizes.CAPTION)
+        ctx.renderer.textCenter("${Int64(shown * 100.0)}%", frame, ctx.theme.text, pointSize: FontSizes.CAPTION)
     }
 
     public func handle(_: UiContext, _: UiEvent): Bool {
@@ -58,6 +68,7 @@ public class Slider <: Widget {
         this.value = value
         this.lowerBound = lower
         this.upperBound = upper
+        registerFocusable(id)
         emit(this)
     }
 
@@ -65,7 +76,12 @@ public class Slider <: Widget {
     public func range(lower: Float32, upper: Float32): Slider {
         lowerBound = min(lower, upper)
         upperBound = max(lower, upper)
-        value.value = clampF32(value.value, lowerBound, upperBound)
+        // Write only when clamping changes the value: this runs on every frame's rebuild,
+        // and an unconditional write would notify the bound state's observers each frame.
+        let clamped = clampF32(value.value, lowerBound, upperBound)
+        if (clamped != value.value) {
+            value.value = clamped
+        }
         this
     }
 
@@ -91,6 +107,7 @@ public class Slider <: Widget {
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
+        claimHoverIfInside(ctx, event, frame, id, CursorShape.Interactive)
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
@@ -122,6 +139,10 @@ public class Slider <: Widget {
             case _ => ()
         }
         false
+    }
+
+    public func focusableId(): ?String {
+        Some(id)
     }
 
     private func updateFromX(x: Float32): Unit {

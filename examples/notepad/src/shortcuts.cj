@@ -7,12 +7,11 @@ package cui_notepad
 import cui.{DesktopApp, Key, Keyboard, UiEvent}
 
 // SDL 把字母键统一上报为大写字母的 ASCII 码；用命名常量代替裸数字，
-// 阅读时能直接对上“Ctrl+字母”的快捷键表。
+// 阅读时能直接对上“Ctrl+字母”的快捷键表。文件级快捷键在此处理；Ctrl+A/C/X/V
+// 交由聚焦的编辑区自行处理（按选区复制/剪切/粘贴、全选），故不在此拦截。
 let KEY_N: UInt8 = 78 // 字母 'N'：新建
 let KEY_O: UInt8 = 79 // 字母 'O'：打开
 let KEY_S: UInt8 = 83 // 字母 'S'：保存；加 Shift 为另存为
-let KEY_C: UInt8 = 67 // 字母 'C'：复制全文
-let KEY_V: UInt8 = 86 // 字母 'V'：粘贴
 
 func handleNotepadEvent(
     event: UiEvent,
@@ -56,13 +55,6 @@ func handleShortcut(
         }
         return true
     }
-    if (key == KEY_C) {
-        copyAll(model.body, model.status)
-        return true
-    }
-    if (key == KEY_V) {
-        pasteClipboard(model.body, model.bodyCursor, model.status)
-        return true
-    }
+    // Ctrl+A/C/X/V 不作拦截，交由聚焦的 TextArea 以自身的选区与剪贴板逻辑处理。
     false
 }

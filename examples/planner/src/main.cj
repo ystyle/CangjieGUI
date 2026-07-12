@@ -3,10 +3,10 @@
  *
  * 演示内容：
  *  - Keyed 与 rememberState 管理的局部状态
- *  - ScrollView、Grid、FlowRow、ZStack 组合的桌面布局
- *  - DerivedState 派生的进度文本与 maxLines 文本换行
+ *  - ScrollView、Grid、FlowRow 组合的桌面布局
+ *  - ProgressBar 动画进度与 maxLines 文本换行
  */
-package cui_focus_planner
+package cui_planner
 
 import cui.{DesktopApp, WindowSpec}
 

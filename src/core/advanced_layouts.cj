@@ -297,12 +297,14 @@ public class FlowRow <: Widget {
 public class ScrollView <: Widget {
     private let child: Widget
     private var scrollOffset: State<Float32>
+    private let scrollBar: ScrollBar
     private var frame = Rect.zero()
     private var contentHeight: Float32 = 0.0
 
     public init(id: String, body!: () -> Unit) {
         child = buildChild(body)
         scrollOffset = localState<Float32>("ScrollView:${id}:offset") {0.0}
+        scrollBar = ScrollBar("ScrollView:${id}:thumb")
         emit(this)
     }
 
@@ -328,7 +330,12 @@ public class ScrollView <: Widget {
             measured = child.measure(ctx, Size(contentWidth, LAYOUT_UNBOUNDED))
         }
         contentHeight = measured.h
-        scrollOffset.value = clampScrollOffset(scrollOffset.value, contentHeight, rect.h)
+        // Clamp writes only on change: layout runs every frame, and the offset may be an
+        // externally owned state whose observers should not fire for no-op writes.
+        let clamped = clampScrollOffset(scrollOffset.value, contentHeight, rect.h)
+        if (clamped != scrollOffset.value) {
+            scrollOffset.value = clamped
+        }
         child.layout(ctx, Rect(rect.x, rect.y - scrollOffset.value, contentWidth, contentHeight))
     }
 
@@ -336,7 +343,7 @@ public class ScrollView <: Widget {
         ctx.renderer.pushClip(frame)
         child.draw(ctx)
         ctx.renderer.popClip()
-        drawVerticalScrollBar(ctx, frame, scrollOffset.value, contentHeight, frame.h)
+        drawVerticalScrollBar(ctx, frame, scrollOffset.value, contentHeight, frame.h, active: scrollBar.dragging(ctx))
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
@@ -347,15 +354,24 @@ public class ScrollView <: Widget {
                     return true
                 }
             case UiEvent.MouseDown(_, x, y) =>
-                if (!frame.contains(x, y)) {
-                    return false
+                if (scrollBar.press(ctx, frame, scrollOffset, contentHeight, frame.h, x, y)) {
+                    return true
                 }
-            case UiEvent.MouseUp(_, x, y) =>
                 if (!frame.contains(x, y)) {
                     return false
                 }
             case UiEvent.MouseMove(x, y) =>
-                if (!frame.contains(x, y)) {
+                if (scrollBar.drag(ctx, frame, scrollOffset, contentHeight, frame.h, y)) {
+                    return true
+                }
+                // While a child drag is live (a slider knob, a text selection), track the
+                // pointer past the viewport edge to the release — pointer capture — instead
+                // of freezing the gesture at the boundary.
+                if (!frame.contains(x, y) && ctx.dragId.isEmpty()) {
+                    return false
+                }
+            case UiEvent.MouseUp(_, x, y) =>
+                if (!frame.contains(x, y) && ctx.dragId.isEmpty()) {
                     return false
                 }
             case _ => ()

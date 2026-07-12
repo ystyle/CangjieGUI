@@ -336,7 +336,7 @@ public class Button <: Widget {
         this.buttonRole = role
         this.customStyle = style
         this.pointSize = fontSize
-        this.controlId = controlIdentity("Button:${title}")
+        this.controlId = focusableControlIdentity("Button:${title}")
         emit(this)
     }
 
@@ -349,6 +349,7 @@ public class Button <: Widget {
         if (value.isEmpty()) {
             throw IllegalArgumentException("Button id must not be empty")
         }
+        reregisterFocusable(controlId, value)
         controlId = value
         this
     }
@@ -392,9 +393,13 @@ public class Button <: Widget {
             case _ => ctx.theme.accentText
         }
         ctx.renderer.textCenter(title, frame, textColor, pointSize: max(1.0, ctx.resolve(pointSize)))
+        if (ctx.showFocusRing(controlId)) {
+            drawFocusRing(ctx, frame, ctx.theme.controlRadius)
+        }
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
+        claimHoverIfInside(ctx, event, frame, controlId, CursorShape.Interactive)
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
@@ -424,6 +429,10 @@ public class Button <: Widget {
         false
     }
 
+    public func focusableId(): ?String {
+        Some(controlId)
+    }
+
     private func buttonStyle(ctx: UiContext): SurfaceStyle {
         match (customStyle) {
             case Some(value) => value
@@ -437,10 +446,8 @@ public class Button <: Widget {
                         } else if (frame.contains(ctx.mouseX, ctx.mouseY)) {
                             style = style.withFill(ctx.theme.fieldActive)
                         }
-                        // A keyboard-operable control shows where Enter/Space will land.
-                        if (ctx.hasFocus(controlId)) {
-                            style = style.withBorder(ctx.theme.accent)
-                        }
+                        // The focus ring (drawn in draw() on keyboard focus) shows where
+                        // Enter/Space will land — no need to also recolour the border.
                         style
                     case _ => base
                 }

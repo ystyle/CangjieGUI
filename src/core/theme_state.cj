@@ -1,6 +1,10 @@
 package cui.core
 
-import sdl.{Color, FrameInfo, Insets, Renderer, SurfaceStyle}
+import sdl.{Color, FrameInfo, Insets, Rect, Renderer, SurfaceStyle, UiEvent}
+
+// A second press within this window and distance of the previous one continues a multi-click.
+private let MULTI_CLICK_MS: UInt64 = 400
+private let MULTI_CLICK_DIST: Float32 = 4.0
 
 public struct Theme {
     public let bg: Color
@@ -184,13 +188,26 @@ public class UiContext {
     public let renderer: Renderer
     public let theme: Theme
     public var focusId: String = ""
+    // Whether the focused control should paint a ring: true when focus last moved by keyboard
+    // (Tab traversal or autofocus), false when a pointer press claimed it — the :focus-visible
+    // convention. Behaviour (activation, caret, arrow nav) uses `focusId`; only the ring gates on this.
+    public var focusRingVisible: Bool = false
+    public var hoverId: String = ""
     public var dragId: String = ""
     public var pressedId: String = ""
+    // Single-slot overlay: a hovered `Tooltip` registers here during draw and the shell
+    // paints it above everything after the tree. Empty text means no tooltip this frame.
+    public var tooltipText: String = ""
+    public var tooltipAnchor: Rect = Rect.zero()
     public var mouseX: Float32 = 0.0
     public var mouseY: Float32 = 0.0
     public var leftMouseDown: Bool = false
     public var shouldClose: Bool = false
     public var frame: FrameInfo = FrameInfo(UInt64(0), UInt64(0))
+    /** Logical size of the drawing surface; overlays clamp their popups to it. */
+    public var viewportWidth: Float32 = 0.0
+    public var viewportHeight: Float32 = 0.0
+    private var activeOverlay: ?Overlay = None
     /** Physical pixels per virtual pixel; set from the window content scale. */
     public var displayScale: Float32 = 1.0
     /** User font scale applied to `fp` lengths; `1.0` keeps `fp` equal to `vp`. */
@@ -221,23 +238,89 @@ public class UiContext {
     }
 
     private var focusClaimedInPress = false
+    private var focusOrder: Array<String> = []
+    /** How many rapid presses ended at the current one: 1 single, 2 double, 3 triple. */
+    public var clickCount: Int64 = 1
+    private var lastPressMs: UInt64 = 0
+    private var lastPressX: Float32 = 0.0
+    private var lastPressY: Float32 = 0.0
+    private var hasLastPress = false
 
     public func requestClose(): Unit {
         shouldClose = true
+    }
+
+    /*
+     * Adopts the focus ring gathered by the latest build. The shell calls this once per
+     * frame after building the tree, so keyboard traversal always reflects the controls
+     * currently on screen and in their declared order.
+     */
+    protected func adoptFocusRing(ids: Array<String>): Unit {
+        focusOrder = ids
+    }
+
+    /** Moves keyboard focus to the next focusable control, wrapping at the end. */
+    public func focusNext(): Unit {
+        moveFocus(1)
+    }
+
+    /** Moves keyboard focus to the previous focusable control, wrapping at the start. */
+    public func focusPrevious(): Unit {
+        moveFocus(-1)
+    }
+
+    /*
+     * Advances focus by `step` positions through the ring. From no focus, a forward step
+     * lands on the first control and a backward step on the last, matching how Tab and
+     * Shift+Tab enter a window. A focus id no longer present (the tree changed shape) is
+     * treated as "outside the ring" and re-enters from the corresponding end.
+     */
+    private func moveFocus(step: Int64): Unit {
+        let count = focusOrder.size
+        if (count == 0) {
+            return
+        }
+        var current = -1
+        for (i in 0..count) {
+            if (focusOrder[i] == focusId) {
+                current = i
+                break
+            }
+        }
+        let next = if (current < 0) {
+            if (step > 0) { 0 } else { count - 1 }
+        } else {
+            (((current + step) % count) + count) % count
+        }
+        focusId = focusOrder[next]
+        focusRingVisible = true // Tab traversal is keyboard, so the ring shows
     }
 
     public func hasFocus(id: String): Bool {
         focusId == id
     }
 
-    public func focus(id: String): Unit {
+    /*
+     * Whether `id` should paint a focus ring: it must have focus AND focus must have last moved
+     * by keyboard. A pointer press focuses without a ring, matching the desktop `:focus-visible`
+     * convention that a click should not leave a keyboard-style outline.
+     */
+    public func showFocusRing(id: String): Bool {
+        focusId == id && focusRingVisible
+    }
+
+    // `viaKeyboard` marks focus the user reached by keyboard (Tab, autofocus) versus a pointer
+    // press; it drives whether a ring shows, not focus itself.
+    public func focus(id: String, viaKeyboard!: Bool = false): Unit {
         focusId = id
         focusClaimedInPress = true
+        focusRingVisible = viaKeyboard
     }
 
     /** Removes keyboard focus from every control. */
     public func clearFocus(): Unit {
         focusId = ""
+        focusRingVisible = false
     }
 
     /*
@@ -245,6 +328,33 @@ public class UiContext {
      * claims it, or clears focus entirely. The shell brackets each MouseDown dispatch
      * with these two calls; any `focus()` during dispatch counts as a claim.
      */
+    /*
+     * Classifies a primary press as single/double/triple by how closely it follows the
+     * previous one in time and space. The shell calls this on each left MouseDown before
+     * dispatch, so controls can read `clickCount` while handling the press. Kept as a
+     * general primitive: any widget can act on double-clicks, not just text.
+     */
+    protected func recordPress(x: Float32, y: Float32): Unit {
+        let now = frame.elapsedMs
+        let dx = x - lastPressX
+        let dy = y - lastPressY
+        let near = dx * dx + dy * dy <= MULTI_CLICK_DIST * MULTI_CLICK_DIST
+        let quick = hasLastPress && now >= lastPressMs && now - lastPressMs <= MULTI_CLICK_MS && near
+        if (quick) {
+            clickCount = if (clickCount >= 3) {
+                1
+            } else {
+                clickCount + 1
+            }
+        } else {
+            clickCount = 1
+        }
+        lastPressMs = now
+        lastPressX = x
+        lastPressY = y
+        hasLastPress = true
+    }
+
     protected func beginPointerPress(): Unit {
         focusClaimedInPress = false
     }
@@ -253,6 +363,95 @@ public class UiContext {
         if (!focusClaimedInPress) {
             clearFocus()
         }
+    }
+
+    private var hoverClaimed = false
+    private var pendingHoverId: String = ""
+    private var pendingHoverShape = CursorShape.Default
+    private var settledHoverShape = CursorShape.Default
+
+    /*
+     * Hover is resolved once per pointer move, mirroring the focus press-settle protocol.
+     * The shell brackets a MouseMove dispatch with begin/settle; each control the pointer
+     * is inside calls `claimHover`. Dispatch visits top-most first, and only the first
+     * claim of a move wins, so overlapping layers resolve to the visually top control.
+     */
+    protected func beginHoverTest(): Unit {
+        hoverClaimed = false
+        pendingHoverId = ""
+        pendingHoverShape = CursorShape.Default
+    }
+
+    /** Claims hover for `id` with the desired pointer shape; the first claim per move wins. */
+    public func claimHover(id: String, shape: CursorShape): Unit {
+        if (!hoverClaimed) {
+            hoverClaimed = true
+            pendingHoverId = id
+            pendingHoverShape = shape
+        }
+    }
+
+    protected func settleHover(): Unit {
+        hoverId = pendingHoverId
+        settledHoverShape = pendingHoverShape
+    }
+
+    /** Returns whether `id` is the control currently under the pointer. */
+    public func isHovered(id: String): Bool {
+        hoverId == id
+    }
+
+    /** Registers a tooltip to paint above the tree this frame, anchored to `rect`. */
+    public func showTooltip(text: String, rect: Rect): Unit {
+        tooltipText = text
+        tooltipAnchor = rect
+    }
+
+    /** Clears any pending tooltip; the shell calls this before drawing each frame. */
+    public func clearTooltip(): Unit {
+        tooltipText = ""
+    }
+
+    /** Registers the interactive overlay (a dropdown/menu popup) for this frame. */
+    public func setOverlay(overlay: Overlay): Unit {
+        activeOverlay = Some(overlay)
+    }
+
+    /** Removes the active overlay — called by the shell each frame and by a closing popup. */
+    public func clearActiveOverlay(): Unit {
+        activeOverlay = None
+    }
+
+    /** Whether an interactive overlay is currently open. */
+    public func hasOverlay(): Bool {
+        match (activeOverlay) {
+            case Some(_) => true
+            case None => false
+        }
+    }
+
+    /**
+     * Gives the active overlay first chance at an event; returns whether it consumed it.
+     * Public so a custom shell (not just `DesktopApp`) can route events through the overlay.
+     */
+    public func dispatchOverlay(event: UiEvent): Bool {
+        match (activeOverlay) {
+            case Some(overlay) => overlay.dispatch(this, event)
+            case None => false
+        }
+    }
+
+    /** Paints the active overlay above the tree; a custom shell calls this after the tree. */
+    public func drawActiveOverlay(): Unit {
+        match (activeOverlay) {
+            case Some(overlay) => overlay.render(this)
+            case None => ()
+        }
+    }
+
+    /** The pointer shape requested by the hovered control, or `Default` when none. */
+    protected func desiredCursor(): CursorShape {
+        settledHoverShape
     }
 
     public func beginDrag(id: String): Unit {

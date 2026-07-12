@@ -1,6 +1,6 @@
 package cui.core
 
-import sdl.{Color, FrameInfo, IconName, MouseButton, Rect, Renderer, Size, SurfaceStyle, UiEvent}
+import sdl.{Color, FrameInfo, IconName, Key, MouseButton, Rect, Renderer, Size, SurfaceStyle, UiEvent}
 
 internal func testContext(): UiContext {
     UiContext(Renderer.headless(), Theme.light())
@@ -249,6 +249,66 @@ func unclaimedPressClearsFocusAndClaimedPressKeepsIt(): Unit {
 }
 
 @Test
+func multiClickCountsRapidPressesAndResetsWhenSlowOrFar(): Unit {
+    let ctx = testContext()
+
+    ctx.frame = FrameInfo(UInt64(100), UInt64(0))
+    ctx.recordPress(10.0, 10.0)
+    @Expect(ctx.clickCount, 1)
+
+    ctx.frame = FrameInfo(UInt64(300), UInt64(0)) // 200ms later, same spot
+    ctx.recordPress(10.0, 10.0)
+    @Expect(ctx.clickCount, 2)
+
+    ctx.frame = FrameInfo(UInt64(500), UInt64(0))
+    ctx.recordPress(11.0, 11.0) // still within the distance threshold
+    @Expect(ctx.clickCount, 3)
+
+    ctx.frame = FrameInfo(UInt64(700), UInt64(0)) // a 4th rapid press cycles back to single
+    ctx.recordPress(11.0, 11.0)
+    @Expect(ctx.clickCount, 1)
+
+    ctx.frame = FrameInfo(UInt64(5000), UInt64(0)) // too slow: resets
+    ctx.recordPress(11.0, 11.0)
+    @Expect(ctx.clickCount, 1)
+
+    ctx.frame = FrameInfo(UInt64(5100), UInt64(0)) // near in time but far in space: resets
+    ctx.recordPress(200.0, 200.0)
+    @Expect(ctx.clickCount, 1)
+}
+
+@Test
+func tooltipRegistersAfterHoverDwellAndClearsOnLeave(): Unit {
+    let ctx = testContext()
+    let inner = SizedLayoutProbe(Size(80.0, 24.0))
+    let tip = Tooltip(text: "保存文档") {
+        emit(inner)
+    }
+    tip.layout(ctx, Rect(10.0, 10.0, 80.0, 24.0))
+    ctx.mouseX = 40.0
+    ctx.mouseY = 20.0 // inside the frame
+
+    // First frame only arms the dwell timer.
+    ctx.frame = FrameInfo(UInt64(0), UInt64(0))
+    ctx.clearTooltip()
+    tip.draw(ctx)
+    @Expect(ctx.tooltipText, "")
+
+    // Past the dwell delay the tooltip registers into the overlay slot.
+    ctx.frame = FrameInfo(UInt64(600), UInt64(600))
+    ctx.clearTooltip()
+    tip.draw(ctx)
+    @Expect(ctx.tooltipText, "保存文档")
+
+    // Moving the pointer away resets the timer, so nothing shows.
+    ctx.mouseX = 500.0
+    ctx.frame = FrameInfo(UInt64(1200), UInt64(600))
+    ctx.clearTooltip()
+    tip.draw(ctx)
+    @Expect(ctx.tooltipText, "")
+}
+
+@Test
 func scrollWheelClampsOffsetWithinContent(): Unit {
     @Expect(scrollOffsetAfterWheel(0.0, -1.0, 240.0, 96.0), Float32(72.0))
     @Expect(scrollOffsetAfterWheel(140.0, -1.0, 240.0, 96.0), Float32(144.0))
@@ -409,6 +469,57 @@ func scrollViewUsesExternalOffsetAndClampsWheelInput(): Unit {
 
     @Expect(offset.value, Float32(72.0))
     @Expect(child.rect.y, Float32(-72.0))
+}
+
+@Test
+func scrollThumbGeometryMapsOffsetsBothWays(): Unit {
+    let frame = Rect(0.0, 0.0, 120.0, 100.0)
+
+    // Content fits: no thumb.
+    @Expect(scrollThumbRect(frame, 0.0, 80.0, 100.0).isNone())
+
+    // Overflowing: thumb sits at the track top for offset 0.
+    let top = scrollThumbRect(frame, 0.0, 300.0, 100.0)
+    @Expect(top.isSome())
+    @Expect(top.getOrThrow().y, Float32(2.0))
+
+    // Offset → thumb top → offset round-trips exactly.
+    let track = scrollBarTrackRect(frame)
+    let thumbH = scrollThumbHeight(track, 300.0, 100.0)
+    let thumbTop = scrollThumbTop(track, thumbH, 100.0, 300.0, 100.0)
+    @Expect(scrollOffsetForThumbTop(thumbTop, track, thumbH, 300.0, 100.0), Float32(100.0))
+}
+
+@Test
+func scrollViewThumbDragUpdatesOffset(): Unit {
+    let ctx = testContext()
+    let offset = State<Float32>(0.0)
+    let child = SizedLayoutProbe(Size(120.0, 300.0))
+    let view = ScrollView("bar") {
+        emit(child)
+    }.scrollState(offset)
+    view.layout(ctx, Rect(0.0, 0.0, 120.0, 100.0))
+
+    // Grab the thumb (top-left at y=2, height 32) near its top, then drag down 40px.
+    @Expect(view.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 115.0, 10.0)))
+    ctx.leftMouseDown = true
+    @Expect(view.handle(ctx, UiEvent.MouseMove(115.0, 50.0)))
+    @Expect(offset.value, Float32(125.0))
+}
+
+@Test
+func scrollViewTrackClickPagesTowardClick(): Unit {
+    let ctx = testContext()
+    let offset = State<Float32>(0.0)
+    let child = SizedLayoutProbe(Size(120.0, 300.0))
+    let view = ScrollView("bar2") {
+        emit(child)
+    }.scrollState(offset)
+    view.layout(ctx, Rect(0.0, 0.0, 120.0, 100.0))
+
+    // Click the track well below the thumb: page down by 0.9 * viewport height.
+    @Expect(view.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 115.0, 80.0)))
+    @Expect(offset.value, Float32(90.0))
 }
 
 @Test
@@ -664,4 +775,244 @@ func forEachKeyedStateFollowsItemAcrossReorder(): Unit {
     build(["b", "a"])
     @Expect(first.value.getOrThrow().value, Int64(11))
     @Expect(second.value.getOrThrow().value, Int64(22))
+}
+
+// A modal hosts a real widget subtree: a press inside the panel reaches the button (release runs
+// its action), a press on the backdrop dismisses, and the whole thing rides the interactive overlay.
+@Test
+func modalRoutesToContentAndBackdropDismisses(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 300.0
+    let presented = State<Bool>(true)
+    let clicked = State<Bool>(false)
+    let modal = Modal(presented) {
+        Button("确定", {=> clicked.value = true}).id("ok")
+    }
+    modal.layout(ctx, Rect.zero())
+    modal.draw(ctx)
+    @Expect(ctx.hasOverlay())
+
+    // The single button centres at the viewport centre; press then release runs its action.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 200.0, 150.0)))
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseUp(MouseButton.Left, 200.0, 150.0)))
+    @Expect(clicked.value)
+    @Expect(presented.value) // the button didn't close it
+
+    // A press on the backdrop (outside the panel) dismisses.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 5.0, 5.0)))
+    @Expect(!presented.value)
+    @Expect(!ctx.hasOverlay())
+}
+
+@Test
+func modalEscapeDismissesAndHiddenRegistersNothing(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 300.0
+
+    let open = State<Bool>(true)
+    let modal = Modal(open) {
+        Button("x", {=> ()}).id("x")
+    }
+    modal.layout(ctx, Rect.zero())
+    modal.draw(ctx)
+    @Expect(ctx.hasOverlay())
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Escape, false)))
+    @Expect(!open.value)
+    @Expect(!ctx.hasOverlay())
+
+    // A dialog that starts hidden builds no content and registers no overlay.
+    let hidden = State<Bool>(false)
+    let quiet = Modal(hidden) {
+        Button("y", {=> ()}).id("y")
+    }
+    quiet.layout(ctx, Rect.zero())
+    quiet.draw(ctx)
+    @Expect(!ctx.hasOverlay())
+}
+
+// If `presented` flips true after construction (as when a button opens the dialog mid-frame), the
+// body is still None until the next build — draw must not register an (empty) overlay that frame.
+@Test
+func modalWaitsForBodyBeforeRegistering(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 300.0
+    let presented = State<Bool>(false) // built hidden -> content is None
+    let modal = Modal(presented) {
+        Button("x", {=> ()}).id("x")
+    }
+    modal.layout(ctx, Rect.zero())
+
+    presented.value = true // simulate an in-frame open, before a rebuild constructs the body
+    modal.draw(ctx)
+    @Expect(!ctx.hasOverlay()) // no empty panel; the dialog appears next frame
+}
+
+// The dialog subtree hangs off the overlay, but the shell dispatches the per-frame tick to the
+// tree — Modal.handle must forward it, or timed behaviours inside a dialog (autofocus, an
+// application Frame hook) would never run.
+@Test
+func modalForwardsFrameTickToContent(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 300.0
+    let presented = State<Bool>(true)
+    let ticks = State<Int64>(0)
+    let modal = Modal(presented) {
+        FrameHandler(onFrame: {_ => ticks.value = ticks.value + 1}) {
+            Button("x", {=> ()}).id("x")
+        }
+    }
+    modal.layout(ctx, Rect.zero())
+    @Expect(!modal.handle(ctx, UiEvent.Frame(FrameInfo(UInt64(16), UInt64(16)))))
+    @Expect(ticks.value, Int64(1))
+}
+
+// A modal is a focus trap: Tab cycles the dialog's own focus stops (captured while its body
+// was built) and never escapes to the controls under the backdrop.
+@Test
+func modalTabCyclesDialogFocusOnly(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 300.0
+    let store = StateStore()
+    let presented = State<Bool>(true)
+    let captured = State<?Modal>(None)
+    let _ = buildRoot({
+        =>
+        Button("背景", {=> ()}).id("bg")
+        captured.value = Some(Modal(presented) {
+            Button("甲", {=> ()}).id("m1")
+            Button("乙", {=> ()}).id("m2")
+        })
+    }, store)
+    let modal = captured.value.getOrThrow()
+    modal.layout(ctx, Rect.zero())
+    modal.draw(ctx)
+    @Expect(ctx.hasOverlay())
+
+    // From no focus Tab enters at the dialog's first stop, then wraps m1 -> m2 -> m1.
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Tab, false)))
+    @Expect(ctx.hasFocus("m1"))
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Tab, false)))
+    @Expect(ctx.hasFocus("m2"))
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Tab, false)))
+    @Expect(ctx.hasFocus("m1")) // wrapped inside the dialog; "bg" is never visited
+}
+
+// `.enabled(false)` takes a control out of Tab traversal for the frame: a stop that ignores
+// Enter/Space would be a dead end. Re-enabling (or `.enabled(true)`) keeps the stop.
+@Test
+func disabledControlLeavesFocusRing(): Unit {
+    let store = StateStore()
+    let _ = buildRoot({
+        =>
+        Button("甲", {=> ()}).id("a")
+        Button("乙", {=> ()}).id("b").enabled(false)
+        Button("丙", {=> ()}).id("c").enabled(true)
+    }, store)
+    let ring = store.focusRing()
+    @Expect(ring.size, 2)
+    @Expect(ring[0], "a")
+    @Expect(ring[1], "c")
+}
+
+// A pointer press focuses without a ring; keyboard focus (autofocus/Tab) shows one — the
+// :focus-visible convention. `hasFocus` is unaffected: only the ring gates on the source.
+@Test
+func focusRingShowsForKeyboardNotPointer(): Unit {
+    let ctx = testContext()
+
+    ctx.focus("a") // pointer press
+    @Expect(ctx.hasFocus("a"))
+    @Expect(!ctx.showFocusRing("a"))
+
+    ctx.focus("b", viaKeyboard: true) // autofocus-style
+    @Expect(ctx.hasFocus("b"))
+    @Expect(ctx.showFocusRing("b"))
+    @Expect(!ctx.showFocusRing("a")) // only the currently focused control
+
+    ctx.focus("c") // pointer again clears the ring
+    @Expect(ctx.hasFocus("c"))
+    @Expect(!ctx.showFocusRing("c"))
+
+    ctx.clearFocus()
+    @Expect(!ctx.hasFocus("c"))
+    @Expect(!ctx.showFocusRing("c"))
+}
+
+// Tab traversal is keyboard, so the control it lands on shows a ring even if focus started from
+// a pointer press.
+@Test
+func tabTraversalShowsFocusRing(): Unit {
+    let ctx = testContext()
+    ctx.adoptFocusRing(["one", "two", "three"])
+
+    ctx.focus("one") // pointer: no ring
+    @Expect(!ctx.showFocusRing("one"))
+
+    ctx.focusNext()
+    @Expect(ctx.hasFocus("two"))
+    @Expect(ctx.showFocusRing("two"))
+
+    ctx.focusPrevious()
+    @Expect(ctx.hasFocus("one"))
+    @Expect(ctx.showFocusRing("one")) // now reached by keyboard
+}
+
+// A right press opens the menu at the pointer; the popup is registered as the active overlay,
+// and a left click on a row runs that item's action and closes.
+@Test
+func contextMenuOpensOnRightClickAndRunsItem(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 300.0
+    ctx.viewportHeight = 400.0
+    let ran = State<Int64>(0)
+    let menu = ContextMenu(items: [MenuItem("复制", {=> ran.value = 1}), MenuItem("删除", {=> ran.value = 2})]) {
+        emit(SizedLayoutProbe(Size(120.0, 60.0)))
+    }
+    menu.layout(ctx, Rect(20.0, 20.0, 120.0, 60.0))
+
+    // A left click alone does nothing (no menu yet); a right click inside opens it.
+    @Expect(!menu.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 40.0, 40.0)))
+    @Expect(menu.handle(ctx, UiEvent.MouseDown(MouseButton.Right, 40.0, 40.0)))
+    menu.draw(ctx)
+    @Expect(ctx.hasOverlay())
+
+    // Menu opens at (40,40); rows begin at y=45, height 28 each. y=80 falls in the second row.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 60.0, 80.0)))
+    @Expect(ran.value, Int64(2))
+    @Expect(!ctx.hasOverlay())
+}
+
+// A click outside dismisses without running anything; reopened, arrow keys move the highlight and
+// Enter runs the highlighted item.
+@Test
+func contextMenuDismissesAndKeyboardRunsHighlight(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 300.0
+    ctx.viewportHeight = 400.0
+    let ran = State<Int64>(0)
+    let menu = ContextMenu(
+        items: [MenuItem("A", {=> ran.value = 1}), MenuItem("B", {=> ran.value = 2}), MenuItem("C", {=> ran.value = 3})]) {
+        emit(SizedLayoutProbe(Size(120.0, 60.0)))
+    }
+    menu.layout(ctx, Rect(20.0, 20.0, 120.0, 60.0))
+
+    let _ = menu.handle(ctx, UiEvent.MouseDown(MouseButton.Right, 40.0, 40.0))
+    menu.draw(ctx)
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 5.0, 5.0)))
+    @Expect(ran.value, Int64(0))
+    @Expect(!ctx.hasOverlay())
+
+    // Reopen, move highlight down twice (0 -> 2), Enter runs "C".
+    let _ = menu.handle(ctx, UiEvent.MouseDown(MouseButton.Right, 40.0, 40.0))
+    menu.draw(ctx)
+    let _ = ctx.dispatchOverlay(UiEvent.KeyDown(Key.Down, false))
+    let _ = ctx.dispatchOverlay(UiEvent.KeyDown(Key.Down, false))
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Enter, false)))
+    @Expect(ran.value, Int64(3))
+    @Expect(!ctx.hasOverlay())
 }

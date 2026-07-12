@@ -20,6 +20,8 @@ main(): Int64 {
     app.setMinimumSize(560, 440)
     app.manage(badgeImage)
     app.run {
+        // 长时间运行跨过午夜后，“今天”高亮随系统时钟走，而非停在启动那天。
+        model.refreshToday(Time.currentDateTime())
         calendarView(model, badge)
     }
     return 0

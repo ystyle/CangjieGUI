@@ -1,6 +1,6 @@
 [package]
 cjc-version = "1.0.5"
-name = "cui_focus_planner"
+name = "cui_planner"
 version = "0.1.0"
 output-type = "executable"
 description = "CUI focus planner example."

@@ -1,7 +1,7 @@
 /*
  * 专注规划台的紫罗兰主题、卡片表面与共享字号令牌。
  */
-package cui_focus_planner
+package cui_planner
 
 import cui.{Color, Length, LengthUnits, SurfaceStyle, Theme}
 

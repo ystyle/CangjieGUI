@@ -1,7 +1,8 @@
 package cui.controls
 
 import sdl.{FontSizes, Key, MouseButton, Pen, Rect, Size, UiEvent}
-import cui.core.{Bindable, CUI_CONTROL_H, UiContext, Widget, controlIdentity, drawSurface, emit}
+import cui.core.{Bindable, CUI_CONTROL_H, CursorShape, Spring, UiContext, Widget, claimHoverIfInside, drawFocusRing,
+    drawSurface, emit, focusableControlIdentity, localState, reregisterFocusable, registerFocusable}
 
 private let SWITCH_TRACK_W: Float32 = 40.0
 private let SWITCH_TRACK_H: Float32 = 22.0
@@ -13,18 +14,30 @@ public class Switch <: Widget {
     private let label: String
     private let checked: Bindable<Bool>
     private var controlId: String
+    private let knobSpring: Spring
     private var frame = Rect.zero()
 
     public init(label: String, checked: Bindable<Bool>) {
         this.label = label
         this.checked = checked
-        this.controlId = controlIdentity("Switch:${label}")
+        let cid = focusableControlIdentity("Switch:${label}")
+        this.controlId = cid
+        // The knob position animates between 0 (off) and 1 (on). Retained so the slide
+        // survives per-frame rebuilds; started at the current state so a static first frame
+        // is already settled (no animation, snapshot-stable).
+        let start: Float32 = if (checked.value) {
+            1.0
+        } else {
+            0.0
+        }
+        this.knobSpring = localState<Spring>("${cid}:knob") {Spring(start)}.value
         emit(this)
     }
 
     /** Sets an explicit focus and press identity; defaults are unique per build. */
     public func id(value: String): Switch {
         validateControlId(value, "Switch")
+        reregisterFocusable(controlId, value)
         controlId = value
         this
     }
@@ -38,26 +51,34 @@ public class Switch <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
+        let goal: Float32 = if (checked.value) {
+            1.0
+        } else {
+            0.0
+        }
+        let t = knobSpring.animate(target: goal, deltaMs: ctx.frame.deltaMs)
+
         let track = Rect(frame.x, frame.centerY() - SWITCH_TRACK_H / 2.0, SWITCH_TRACK_W, SWITCH_TRACK_H)
-        let trackColor = if (checked.value) {
-            ctx.theme.accent
-        } else {
-            ctx.theme.panelEdge
-        }
-        ctx.renderer.fillRoundedRect(track, SWITCH_TRACK_H / 2.0, trackColor)
-        let knobX = if (checked.value) {
-            track.right() - 11.0
-        } else {
-            track.x + 11.0
-        }
+        // Track colour and knob position share the spring, so both cross together smoothly.
+        ctx.renderer.fillRoundedRect(track, SWITCH_TRACK_H / 2.0, ctx.theme.panelEdge.lerp(ctx.theme.accent, t))
+        let offX = track.x + 11.0
+        let onX = track.right() - 11.0
+        let knobX = offX + (onX - offX) * t
         ctx.renderer.fillCircle(knobX, track.centerY() + 1.0, 8.5, ctx.theme.shadow.withAlpha(28))
         ctx.renderer.fillCircle(knobX, track.centerY(), 8.0, ctx.theme.panelRaised)
         let textY = frame.centerY() - ctx.renderer.textHeight(pointSize: FontSizes.CONTROL) / 2.0
         ctx.renderer.text(label, track.right() + 12.0, textY, ctx.theme.text, pointSize: FontSizes.CONTROL)
+        if (ctx.showFocusRing(controlId)) {
+            drawFocusRing(ctx, track, SWITCH_TRACK_H / 2.0)
+        }
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
         toggleInteraction(ctx, event, frame, controlId, {=> checked.value = !checked.value})
+    }
+
+    public func focusableId(): ?String {
+        Some(controlId)
     }
 }
 
@@ -67,19 +88,29 @@ public class RadioButton <: Widget {
     private let selected: Bindable<Int64>
     private let optionValue: Int64
     private var controlId: String
+    private let dotSpring: Spring
     private var frame = Rect.zero()
 
     public init(label: String, selected: Bindable<Int64>, value: Int64) {
         this.label = label
         this.selected = selected
         this.optionValue = value
-        this.controlId = controlIdentity("RadioButton:${label}:${value}")
+        this.controlId = focusableControlIdentity("RadioButton:${label}:${value}")
+        // The inner dot scales in when this option becomes selected. Retained across rebuilds and
+        // started at the current state, so a static first frame is settled (snapshot-stable).
+        let dotStart: Float32 = if (selected.value == value) {
+            1.0
+        } else {
+            0.0
+        }
+        this.dotSpring = localState<Spring>("${this.controlId}:dot") {Spring(dotStart)}.value
         emit(this)
     }
 
     /** Sets an explicit focus and press identity; defaults are unique per build. */
     public func id(value: String): RadioButton {
         validateControlId(value, "RadioButton")
+        reregisterFocusable(controlId, value)
         controlId = value
         this
     }
@@ -93,23 +124,34 @@ public class RadioButton <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
+        let goal: Float32 = if (isSelected()) {
+            1.0
+        } else {
+            0.0
+        }
+        let t = dotSpring.animate(target: goal, deltaMs: ctx.frame.deltaMs)
         let centerX = frame.x + 9.0
         let centerY = frame.centerY()
         ctx.renderer.fillCircle(centerX, centerY, 9.0, ctx.theme.field)
-        ctx.renderer.strokeCircle(centerX, centerY, 8.5, Pen(width: 1.5, color: if (isSelected()) {
-            ctx.theme.accent
-        } else {
-            ctx.theme.panelEdge
-        }), segments: 32)
-        if (isSelected()) {
-            ctx.renderer.fillCircle(centerX, centerY, 4.5, ctx.theme.accent)
+        ctx.renderer.strokeCircle(centerX, centerY, 8.5,
+            Pen(width: 1.5, color: ctx.theme.panelEdge.lerp(ctx.theme.accent, t)), segments: 32)
+        // Grows from nothing to the full 4.5-radius dot as the option is selected.
+        if (t > 0.001) {
+            ctx.renderer.fillCircle(centerX, centerY, 4.5 * t, ctx.theme.accent)
         }
         let textY = centerY - ctx.renderer.textHeight(pointSize: FontSizes.CONTROL) / 2.0
         ctx.renderer.text(label, frame.x + 26.0, textY, ctx.theme.text, pointSize: FontSizes.CONTROL)
+        if (ctx.showFocusRing(controlId)) {
+            drawFocusRing(ctx, Rect(centerX - 9.0, centerY - 9.0, 18.0, 18.0), 9.0)
+        }
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
         toggleInteraction(ctx, event, frame, controlId, {=> selected.value = optionValue})
+    }
+
+    public func focusableId(): ?String {
+        Some(controlId)
     }
 
     private func isSelected(): Bool {
@@ -129,6 +171,7 @@ public class Picker <: Widget {
         this.id = id
         this.items = items
         this.selected = selected
+        registerFocusable(id)
         emit(this)
     }
 
@@ -141,7 +184,7 @@ public class Picker <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
-        drawSurface(ctx, frame, ctx.theme.fieldSurface(ctx.hasFocus(id)))
+        drawSurface(ctx, frame, ctx.theme.fieldSurface(ctx.showFocusRing(id)))
         let label = if (items.isEmpty()) {
             "—"
         } else {
@@ -158,6 +201,7 @@ public class Picker <: Widget {
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
+        claimHoverIfInside(ctx, event, frame, id, CursorShape.Interactive)
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
@@ -182,6 +226,10 @@ public class Picker <: Widget {
             case _ => ()
         }
         false
+    }
+
+    public func focusableId(): ?String {
+        Some(id)
     }
 
     private func move(delta: Int64): Unit {
@@ -217,6 +265,7 @@ public class Stepper <: Widget {
         validateControlId(id, "Stepper")
         this.id = id
         this.value = value
+        registerFocusable(id)
         emit(this)
     }
 
@@ -224,7 +273,12 @@ public class Stepper <: Widget {
     public func range(lower: Int64, upper: Int64): Stepper {
         lowerBound = min(lower, upper)
         upperBound = max(lower, upper)
-        value.value = clampInt(value.value)
+        // Write only when clamping changes the value: this runs on every frame's rebuild,
+        // and an unconditional write would notify the bound state's observers each frame.
+        let clamped = clampInt(value.value)
+        if (clamped != value.value) {
+            value.value = clamped
+        }
         this
     }
 
@@ -246,13 +300,14 @@ public class Stepper <: Widget {
     }
 
     public func draw(ctx: UiContext): Unit {
-        drawSurface(ctx, frame, ctx.theme.fieldSurface(ctx.hasFocus(id)))
+        drawSurface(ctx, frame, ctx.theme.fieldSurface(ctx.showFocusRing(id)))
         ctx.renderer.textCenter("−", decrementButton(), ctx.theme.text, pointSize: FontSizes.TITLE)
         ctx.renderer.textCenter("${value.value}", valueFrame(), ctx.theme.text, pointSize: FontSizes.CONTROL)
         ctx.renderer.textCenter("+", incrementButton(), ctx.theme.text, pointSize: FontSizes.TITLE)
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
+        claimHoverIfInside(ctx, event, frame, id, CursorShape.Interactive)
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
@@ -287,6 +342,10 @@ public class Stepper <: Widget {
             case _ => ()
         }
         false
+    }
+
+    public func focusableId(): ?String {
+        Some(id)
     }
 
     private func decrement(): Unit {
@@ -329,6 +388,7 @@ private func toggleInteraction(
     id: String,
     activate: () -> Unit
 ): Bool {
+    claimHoverIfInside(ctx, event, frame, id, CursorShape.Interactive)
     match (event) {
         case UiEvent.MouseDown(MouseButton.Left, x, y) =>
             if (frame.contains(x, y)) {

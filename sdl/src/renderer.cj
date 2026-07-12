@@ -151,6 +151,11 @@ public class Renderer {
      * Throws `CuiException` when SDL rejects the renderer draw color update.
      */
     public func setColor(color: Color): Unit {
+        // A headless renderer (null ptr, used by widget unit tests) draws nothing rather than
+        // throwing, so draw() can be exercised off-screen. The geometry paths already no-op this way.
+        if (ptr.isNull()) {
+            return
+        }
         if (!unsafe { SDL_SetRenderDrawColor(ptr, color.r, color.g, color.b, color.a) }) {
             throw CuiException("SDL_SetRenderDrawColor failed: ${lastSdlError()}")
         }
@@ -160,6 +165,11 @@ public class Renderer {
      * Throws `CuiException` when SDL cannot clear the current render target.
      */
     public func clear(color: Color): Unit {
+        // Headless renderers no-op like every other draw entry point, so canvas or shell
+        // code that clears explicitly stays testable off-screen.
+        if (ptr.isNull()) {
+            return
+        }
         setColor(color)
         if (!unsafe { SDL_RenderClear(ptr) }) {
             throw CuiException("SDL_RenderClear failed: ${lastSdlError()}")
@@ -167,6 +177,9 @@ public class Renderer {
     }
 
     public func present(): Unit {
+        if (ptr.isNull()) {
+            return // headless renderer: nothing to present
+        }
         ensureSdl(unsafe { SDL_RenderPresent(ptr) }, "SDL_RenderPresent")
     }
 

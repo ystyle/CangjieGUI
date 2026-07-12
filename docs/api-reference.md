@@ -92,13 +92,40 @@
 
 ## 4. 上下文与枚举
 
-`UiContext` 公开渲染器、主题、焦点/拖动/按压 ID、鼠标状态、关闭标志、`FrameInfo`，以及
+`UiContext` 公开渲染器、主题、焦点/悬停/拖动/按压 ID、鼠标状态、关闭标志、`FrameInfo`，以及
 `displayScale`、`fontScale` 两个缩放因子。方法包括：`requestClose`、`hasFocus`、`focus`、
-`clearFocus`、`beginDrag`、`isDragging`、`clearDrag`、`press`、`isPressed`、`clearPress`、
-`resolve(Length): Float32`、`resolve(LengthInsets): Insets`。
+`clearFocus`、`focusNext`、`focusPrevious`、`isHovered`、`claimHover(id, CursorShape)`、`beginDrag`、
+`isDragging`、`clearDrag`、`press`、`isPressed`、`clearPress`、`resolve(Length): Float32`、
+`resolve(LengthInsets): Insets`。
+
+指针悬停：控件在 `handle` 中经 `claimHover` 请求一种
+`CursorShape`（`Default` / `Interactive` / `Text`）；内置控件统一通过框架内部助手
+`claimHoverIfInside` 调用它（该助手不对应用导出，自定义控件直接用 `claimHover`）。外壳在每次鼠标移动时结算最顶层的认领，并
+把对应形状映射为 SDL 系统光标；`DesktopApp.useBaseCursor(SystemCursor)` 设定无人认领时的静止
+光标。`isHovered(id)` 供绘制态使用（如按钮悬停浅高亮）。
 
 焦点遵循“按下即结算”：一次主键按下后，若没有控件调用 `focus` 认领焦点，当前焦点被清除
 （点击空白使文本框失焦）。该结算由 `DesktopApp` 在每次 MouseDown 分发后执行。
+
+多次点击：`clickCount`（1 单击 / 2 双击 / 3 三击）由外壳在每次左键按下前经 `recordPress`
+按时间（400ms）与距离（4px）阈值识别，控件在处理该次按下时读取。文本框据此实现双击选词、
+三击选行，此原语对任意控件通用。
+
+动画：`Spring(value, stiffness=210, damping=24)` 是弹簧-阻尼数值原语——`target(v)` 设定目标、
+`tick(deltaMs)` 每帧推进、`value` 读取、`animate(target:, deltaMs:)` 把“设目标+推进+读值”合成
+一步、`reset(v)` 无动画瞬置、`settled()` 判稳。控件在 `draw` 中按 `ctx.frame.deltaMs` 推进并读取，
+适配逐帧重绘；到达目标后精确停住，空闲零开销。`Switch`（滑块/轨道色）、`Checkbox`（勾选缩放）、
+`RadioButton`（圆点缩放）、`ProgressBar`（填充滑动）均以此实现状态切换的平滑过渡。
+`Color.lerp(other, t)` 在两色间按 `t∈[0,1]` 线性插值（用于随动画过渡颜色）。
+
+键盘焦点遍历：可聚焦控件在构建期按声明顺序登记进“焦点环”，`DesktopApp` 每帧构建后经
+`adoptFocusRing` 采纳，并在收到 `Tab`（`Shift+Tab` 反向）时调用 `focusNext` / `focusPrevious`
+环形移动焦点；`Tab` 由外壳消费，不下发给聚焦控件。只读 `TextArea` 不登记。`focusNext` /
+`focusPrevious` 也可由应用直接调用（例如自定义快捷键或分步向导）。
+
+焦点环仅在键盘聚焦时绘制：`UiContext` 记 `focusRingVisible`，`Tab` 遍历与 `focus(id, viaKeyboard: true)`
+（`autofocus` 用）置真、指针 `focus(id)` 与 `clearFocus` 置假；控件用 `showFocusRing(id)`（聚焦且经键盘
+到达）而非 `hasFocus(id)` 决定是否画描边。行为逻辑仍用 `hasFocus`，不受聚焦来源影响。
 
 | 枚举 | 成员 |
 |---|---|
@@ -127,10 +154,19 @@
 | `ZStack` | `body` | `alignment`；后声明的子项绘制在上层 |
 | `Grid` | `columns`、`body` | `spacing(all)`、`spacing(horizontal, vertical)`；列数小于 1 抛异常 |
 | `FlowRow` | `body` | `spacing`；空间不足自动换行 |
-| `ScrollView` | `id`、`body` | 垂直滚动；`scrollState` 接管偏移；溢出时为滚动条预留轨道，不遮挡内容 |
+| `ScrollView` | `id`、`body` | 垂直滚动；`scrollState` 接管偏移；溢出时为滚动条预留轨道，不遮挡内容；滑块可拖动、轨道可翻页 |
 | `Panel` | `body`（可选 `padding: LengthInsets`） | `contentPadding`、`style`、`flexible` |
+| `Tooltip` | `text`、`body` | 悬停约 500ms 后在树上层绘制提示气泡；透明包裹，不改变布局/事件 |
+| `Dropdown` | `id`、`items`、`selected` | 下拉选择：点击/Enter 打开，弹出列表浮于树上；选中/外点/Esc 关闭，上下键移动高亮。面向中短列表：弹层高度按视口截断，暂无内部滚动 |
+| `ContextMenu` | `items`、`body` | 为子控件附加右键菜单：指针处弹出，选中运行动作并关闭、外点/Esc 取消、方向键与悬停移动高亮；透明包裹，仅拦截子区域内右键 |
+| `Modal` | `presented`、`body`（可选 `onDismiss`） | 模态对话框：`presented` 为真时暗化背景+居中面板，承载真实控件子树；拦截全部输入，`Tab` 在对话框内循环（焦点陷阱），每帧 Frame 转发进子树（`autofocus` 可用）；外点/Esc 关闭；零尺寸、仅呈现时构建 `body`，置于根部 `ZStack` |
 | `Flexible` | `body` | 兼容的权重包装容器，新代码可用 `.flex` |
 | `Spacer` | 无 | 弹性空白 |
+
+`ContextMenu` 的条目为 `MenuItem(label: String, action: () -> Unit)`。`Dropdown` 弹出列表与
+`ContextMenu` 菜单都由**交互式浮层**承载：控件在 `draw` 中经 `UiContext.setOverlay(Overlay(...))`
+注册一个浮层，外壳在派发树事件前先调用 `UiContext.dispatchOverlay`、在树绘制后调用
+`drawActiveOverlay`，故浮层内容始终在最上层且优先接收事件。自定义控件可复用这套机制实现弹出层。
 
 ## 7. 基础控件
 
@@ -157,29 +193,48 @@ Enter/Space，悬停与按压有主题化的视觉反馈。
 | `RadioButton` | `RadioButton(label, selected, value)` | `id`；多个实例共享同一 `Bindable<Int64>` |
 | `Picker` | `Picker(id, items, selected)` | 点击前后区域或 Left/Right 循环选择 |
 | `Stepper` | `Stepper(id, Bindable<Int64>)` | `range(lower, upper)`、`step(value)` |
-| `SegmentedControl` | `SegmentedControl(items, selected)` | 分段单选 |
-| `TabView` | `TabView(labels, selected) { pages }` | 页面按标签顺序声明 |
-| `ListView` | `ListView(items, selected)` | `scrollState`；选中索引和滚轮滚动 |
+| `SegmentedControl` | `SegmentedControl(items, selected)` | 分段单选；选中指示器弹簧滑动到新段 |
+| `TabView` | `TabView(labels, selected) { pages }` | 页面按标签顺序声明；活动标签指示器弹簧滑动 |
+| `ListView` | `ListView(items, selected)` | `scrollState`；点击选择、滚轮滚动，`Tab` 聚焦 + 方向键导航；选择变化即滚入可视区（含应用层改选），无外部滚动态时偏移按身份保留；滑块可拖动 |
+| `Table` | `Table(id, columns, rows, selected)` | 多列数据表：固定表头、窗口化滚动；点击列头排序（再次反向、数值列按数值），行选择存原始行索引故排序后跟随，`Tab` + 方向键/Home/End 导航；悬停保持默认箭头光标 |
 | `ProgressBar` | `ProgressBar(Observable<Float32>)` | `range(lower, upper)` |
 | `Slider` | `Slider(id, Bindable<Float32>)` | `range(lower, upper)`；拖动和 Left/Right |
 
 `Stepper.step` 的值必须大于 0，否则抛 `IllegalArgumentException`。数值控件会安全处理反向范围和
 越界输入。
 
+`Table` 的列为 `TableColumn(title, width, numeric!: Bool = false)`，行为 `Array<Array<String>>`（按列
+索引的单元格）。`numeric` 列右对齐并按数值排序（`88 < 100`），文本列左对齐按 UTF-8 字节序。排序为每帧
+稳定归并排序，始终反映最新单元格值；超大数据集应在模型侧预排序、以无激活排序列的方式传入。
+
 ## 9. 文本
 
 | 类型 | 构造函数 | 链式 API/行为 |
 |---|---|---|
-| `TextField` | `TextField(id, text: Bindable<String>)` | `cursorState`；单行 UTF-8 编辑 |
-| `TextArea` | `TextArea(id, text: Bindable<String>)` | `scrollState`、`cursorState`、`editable` |
+| `TextField` | `TextField(id, text, cursor!: ?State<Int64> = None, anchor!: ?State<Int64> = None)` | `autofocus`；单行 UTF-8 编辑；Shift 扩选、拖选、Ctrl+A/C/X/V；`undo`/`redo`（Ctrl+Z/Y） |
+| `TextArea` | `TextArea(id, text, scroll!: ?State<Float32> = None, cursor!: ?State<Int64> = None, anchor!: ?State<Int64> = None, editable!: Bool = true)` | 多行选区、Shift+↑↓ 跨行扩选、拖选、Ctrl+A/C/X/V；`undo`/`redo`（Ctrl+Z/Y）；只读区（`editable: false`）不参与 Tab 遍历 |
+| `ComboBox` | `ComboBox(id, text: Bindable<String>, options)` | 可编辑下拉：内嵌 `TextField`（完整编辑）+ 建议列表浮层；键入过滤（无匹配显示“—”占位）、点击/回车填入，自由文本亦保留。面向中短建议列表：弹层高度按视口截断，暂无内部滚动 |
+
+外部状态（滚动、光标、锚点）均为可选命名参数；持有 `cursor!` 就应连同 `anchor!` 一并持有并
+**成对改写**——只改光标会残留“幻影选区”，下一次键入会替换它覆盖的内容。
+
+光标跟随：`TextField` 水平滑动文本窗口使光标始终可见（绘制、选区与命中测试共享同一偏移）；
+`TextArea` 在键盘编辑、导航与撤销后把光标行滚入视口。撤销合并除 500ms 时间窗外，在光标跳转
+（点击/方向键）处即时断组。
 
 插入光标与字形行等高、闪烁周期约 1.06 秒；点击定位按真实文本测量落在最近字符边界；
-超宽内容裁剪于控件表面内。`TextEditState(text, cursor=None)` 或 `TextEditState(value)` 提供：
+超宽内容裁剪于控件表面内。`TextEditState(text, cursor=None, anchor=None)` 或 `TextEditState(value)` 提供：
 
-- `normalizeCursor`、`moveTo`。
-- `insert`、`backspace`、`deleteForward`。
-- `moveLeft`、`moveRight`、`moveToStart`、`moveToEnd`。
-- `moveToLineStart`、`moveToLineEnd`、`moveLineUp`、`moveLineDown`。
+- `normalizeCursor`、`moveTo`、`extendTo`。
+- `insert`、`backspace`、`deleteForward`（均替换/删除当前选区）。
+- `moveLeft`、`moveRight`、`moveToStart`、`moveToEnd`（折叠选区）。
+- `extendLeft`、`extendRight`、`extendToStart`、`extendToEnd`（保持锚点扩选）。
+- `moveToLineStart`、`moveToLineEnd`、`moveLineUp`、`moveLineDown`（折叠）。
+- `extendToLineStart`、`extendToLineEnd`、`extendLineUp`、`extendLineDown`（按列跨行扩选）。
+- 选区：`hasSelection`、`selectionStart`、`selectionEnd`、`selectedText`、`selectAll`、`deleteSelection`、`clearSelection`。
+- `selectWordAt(position)`（双击选词，按字符类归并）、`selectLineAt(position)`（三击选行，含行尾换行）。
+
+选区语义位于 `anchor`/`cursor` 之间，二者重合即无选区；不传 `anchor` 的控件（只读文本区）沿用原光标行为。
 
 ## 10. 媒体与事件包装器
 

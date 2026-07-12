@@ -1,7 +1,7 @@
 package cui.text
 
 import sdl.{FontSizes, Point, Rect}
-import cui.core.{CUI_SMALL_H, UiContext}
+import cui.core.{CUI_SMALL_H, UiContext, scrollLineIndex, scrollLineRemainder}
 
 private let TEXT_CURSOR_W: Float32 = 1.5
 private let TEXT_FIELD_PAD_X: Float32 = 8.0
@@ -59,9 +59,12 @@ private func textCursorForOffset(
     lineEnd
 }
 
-internal func textFieldCursorForPoint(ctx: UiContext, frame: Rect, text: String, x: Float32): Int64 {
+// `xShift` is the field's horizontal follow offset: the text window slides left by this many
+// pixels when the caret runs past the inner width, so hit-testing adds it back.
+internal func textFieldCursorForPoint(ctx: UiContext, frame: Rect, text: String, x: Float32,
+    xShift!: Float32 = 0.0): Int64 {
     let lineEnd = lineEndAfterOrAt(text, 0)
-    textCursorForOffset(ctx, text, 0, lineEnd, x - frame.x - TEXT_FIELD_PAD_X)
+    textCursorForOffset(ctx, text, 0, lineEnd, x - frame.x - TEXT_FIELD_PAD_X + xShift)
 }
 
 internal func textAreaCursorForPoint(
@@ -77,16 +80,83 @@ internal func textAreaCursorForPoint(
     textCursorForOffset(ctx, content.text, lineStart, lineEnd, point.x - viewport.x)
 }
 
-internal func drawTextFieldCursor(ctx: UiContext, frame: Rect, id: String, text: String, cursor: Int64): Unit {
+/*
+ * Paints the selection band behind a single-line field's text. Both edges use the same
+ * prefix-width measurement as the caret, so the band lines up with the glyphs exactly; the
+ * fill is translucent so the selected text stays legible on top.
+ */
+internal func drawTextFieldSelection(ctx: UiContext, frame: Rect, text: String, selStart: Int64, selEnd: Int64,
+    xShift!: Float32 = 0.0): Unit {
+    if (selStart >= selEnd) {
+        return
+    }
+    let startW = ctx.renderer.textWidth(text[0..selStart], pointSize: FontSizes.BODY)
+    let endW = ctx.renderer.textWidth(text[0..selEnd], pointSize: FontSizes.BODY)
+    let xStart = frame.x + TEXT_FIELD_PAD_X - xShift + startW
+    let xEnd = frame.x + TEXT_FIELD_PAD_X - xShift + endW
+    let lineHeight = ctx.renderer.textHeight(pointSize: FontSizes.BODY)
+    // Opaque enough to read as a selection over the focused field's tinted surface, still
+    // translucent so the glyphs drawn on top stay legible.
+    ctx.renderer.fill(Rect(xStart, frame.centerY() - lineHeight / 2.0, xEnd - xStart, lineHeight),
+        ctx.theme.accent.withAlpha(115))
+}
+
+internal func drawTextFieldCursor(ctx: UiContext, frame: Rect, id: String, text: String, cursor: Int64,
+    xShift!: Float32 = 0.0): Unit {
     if (!ctx.hasFocus(id) || !textCursorVisible(ctx)) {
         return
     }
     let position = normalizedTextCursor(text, cursor)
-    let x = frame.x + TEXT_FIELD_PAD_X + ctx.renderer.textWidth(text[0..position], pointSize: FontSizes.BODY)
+    let prefixW = ctx.renderer.textWidth(text[0..position], pointSize: FontSizes.BODY)
+    let x = frame.x + TEXT_FIELD_PAD_X - xShift + prefixW
     // The caret spans exactly the glyph row: same height and vertical center as the
     // text the field draws, instead of the field's padding box.
     let lineHeight = ctx.renderer.textHeight(pointSize: FontSizes.BODY)
     ctx.renderer.fill(Rect(x, frame.centerY() - lineHeight / 2.0, TEXT_CURSOR_W, lineHeight), ctx.theme.accent)
+}
+
+/*
+ * Paints the selection across the visible lines of a text area. Each line contributes the
+ * band covering its selected bytes; a line whose trailing newline is inside the selection
+ * extends to the viewport's right edge, giving the familiar full-width look for interior
+ * and blank lines. Offsets use the same prefix-width measurement as the caret.
+ */
+internal func drawTextAreaSelection(
+    ctx: UiContext,
+    viewport: Rect,
+    content: TextAreaContent,
+    selStart: Int64,
+    selEnd: Int64
+): Unit {
+    if (selStart >= selEnd) {
+        return
+    }
+    let text = content.text
+    let lineHeight = ctx.renderer.textHeight(pointSize: FontSizes.BODY)
+    var lineStart = startOfTextLine(text, scrollLineIndex(content.scroll))
+    var y = viewport.y - scrollLineRemainder(content.scroll)
+    while (y < viewport.bottom()) {
+        let lineEnd = lineEndAfterOrAt(text, lineStart)
+        let a = max(selStart, lineStart)
+        let b = min(selEnd, lineEnd)
+        let newlineSelected = lineEnd < text.size && selStart <= lineEnd && selEnd > lineEnd
+        if (a < b || newlineSelected) {
+            let xA = viewport.x + ctx.renderer.textWidth(text[lineStart..a], pointSize: FontSizes.BODY)
+            let xB = if (newlineSelected) {
+                viewport.right()
+            } else {
+                viewport.x + ctx.renderer.textWidth(text[lineStart..b], pointSize: FontSizes.BODY)
+            }
+            if (xB > xA) {
+                ctx.renderer.fill(Rect(xA, y, xB - xA, lineHeight), ctx.theme.accent.withAlpha(115))
+            }
+        }
+        if (lineEnd >= text.size) {
+            break
+        }
+        lineStart = nextTextBoundary(text, lineEnd)
+        y += CUI_SMALL_H
+    }
 }
 
 internal func drawTextAreaCursor(

@@ -41,6 +41,15 @@ public class Keyed <: Widget {
     public func acceptsStretch(axis: Axis): Bool {
         child.acceptsStretch(axis)
     }
+
+    public func participatesInLayout(): Bool {
+        // Forwarded so `.visible(false)` inside ForEach leaves no stray spacing gap.
+        child.participatesInLayout()
+    }
+
+    public func focusableId(): ?String {
+        child.focusableId()
+    }
 }
 
 /**

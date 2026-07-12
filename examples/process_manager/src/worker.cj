@@ -71,7 +71,11 @@ func tick(frame: FrameInfo, model: ProcessModel, worker: RefreshWorker): Unit {
     model.nowTick.value = frame.elapsedMs
     match (worker.collect()) {
         case Some(snapshot) =>
+            // 选中存的是行索引，而新快照会重排/增删行——先记下选中进程的 PID，
+            // 换过快照后按 PID 找回同一进程，避免高亮悄悄落到别的进程上。
+            let pid = selectedPid(model)
             model.output.value = snapshot
+            model.selectedRow.value = rowIndexOfPid(model.processRows.value, pid)
             model.refreshedTick.value = frame.elapsedMs
         case None => ()
     }
@@ -86,7 +90,8 @@ func tick(frame: FrameInfo, model: ProcessModel, worker: RefreshWorker): Unit {
 func loadProcesses(): String {
     // 用 && 串联：chcp 切换 UTF-8 代码页失败时就不再执行 tasklist，
     // 否则 tasklist 会按当前代码页（如 GBK）输出字节，后续 UTF-8 解码必然出错。
-    match (executeWithOutput("cmd", ["/D", "/C", "chcp 65001 >NUL && tasklist"])) {
+    // /FO CSV /NH 输出无表头的 CSV，便于解析成表格行（列名由视图层给出）。
+    match (executeWithOutput("cmd", ["/D", "/C", "chcp 65001 >NUL && tasklist /FO CSV /NH"])) {
         case (0, stdoutBytes, _) => bytesToText(stdoutBytes)
         case (_, _, stderrBytes) => "tasklist 执行失败：\n${bytesToText(stderrBytes)}"
     }

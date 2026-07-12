@@ -86,4 +86,14 @@ public class Panel <: Widget {
     public func isFlexible(): Bool {
         isFlexiblePanel && child.isFlexible()
     }
+
+    public func flexWeight(): Float32 {
+        // A panel is sizing chrome around its content: when it takes part in a flex pass,
+        // the content's declared weight decides the share, not the wrapper.
+        child.flexWeight()
+    }
+
+    public func focusableId(): ?String {
+        child.focusableId()
+    }
 }

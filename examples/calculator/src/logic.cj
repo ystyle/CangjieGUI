@@ -8,6 +8,7 @@ package cui_calculator
 
 import std.convert.Parsable
 import std.math.abs
+import std.math.round
 import std.math.sqrt
 
 func press(model: CalcModel, key: CalcKey): Unit {
@@ -17,7 +18,7 @@ func press(model: CalcModel, key: CalcKey): Unit {
         case CalcKey.Dot => appendDot(model)
         case CalcKey.Op(op) => choose(model, op)
         case CalcKey.Equals => finish(model)
-        case CalcKey.Negate => applyUnary(model, {value => formatValue(-value)})
+        case CalcKey.Negate => negate(model)
         case CalcKey.Percent => applyUnary(model, {value => formatValue(value / Limit.PERCENT)})
         case CalcKey.SquareRoot => squareRoot(model)
         case CalcKey.Square => applyUnary(model, {value => formatValue(value * value)})
@@ -92,6 +93,19 @@ func applyUnary(model: CalcModel, transform: (Float64) -> String): Unit {
     model.resetDisplay = true
 }
 
+/* 取负在位翻转符号，且不结束数字输入：键入 12 → ± → 3 得到 -123；对 0 取负保持原样。 */
+func negate(model: CalcModel): Unit {
+    recoverFromError(model)
+    if (model.display == DisplayText.ZERO) {
+        return
+    }
+    model.display = if (model.display.startsWith("-")) {
+        model.display[1..model.display.size]
+    } else {
+        "-${model.display}"
+    }
+}
+
 func squareRoot(model: CalcModel): Unit {
     recoverFromError(model)
     let value = currentValue(model)
@@ -106,7 +120,8 @@ func squareRoot(model: CalcModel): Unit {
 func reciprocal(model: CalcModel): Unit {
     recoverFromError(model)
     let value = currentValue(model)
-    if (abs(value) < Limit.DIVIDE_EPSILON) {
+    // 精确判零：极小但非零的除数是合法输入（IEEE 除法定义良好），用阈值会把它们误报成除零。
+    if (value == 0.0) {
         fail(model)
         return
     }
@@ -141,7 +156,7 @@ func finish(model: CalcModel): Unit {
         case CalcOp.Subtract => result = model.stored - rhs
         case CalcOp.Multiply => result = model.stored * rhs
         case CalcOp.Divide =>
-            if (abs(rhs) < Limit.DIVIDE_EPSILON) {
+            if (rhs == 0.0) {
                 fail(model)
                 return
             }
@@ -170,7 +185,8 @@ func currentValue(model: CalcModel): Float64 {
 /* 接近整数的结果按整数显示；超出 Int64 精确范围的值保持浮点形式，避免转换溢出。 */
 func formatValue(value: Float64): String {
     if (abs(value) < Limit.INTEGER_RANGE) {
-        let rounded = Int64(value)
+        // 四舍五入而非截断：0.999…（如 1÷49×49）与 2.000…4（如 √2 的平方）要对称吸附。
+        let rounded = Int64(round(value))
         if (abs(value - Float64(rounded)) < Limit.INTEGER_EPSILON) {
             return "${rounded}"
         }
