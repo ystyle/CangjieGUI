@@ -3,7 +3,8 @@
  *
  *  - 表格是主视图；工具栏与右键菜单的编辑/删除都作用于当前选中行
  *  - 搜索用 ComboBox：可键入任意关键字过滤，也可从公司建议里挑
- *  - 表单模态承载真实 TextField 子树，保存按钮按“姓名非空”校验启用
+ *  - 表单模态承载真实控件子树，保存按钮按“姓名非空”校验启用；公司字段用对话框内的
+ *    ComboBox 演示嵌套浮层——建议列表经浮层栈压在对话框之上
  */
 package cui_contacts
 
@@ -85,7 +86,12 @@ func formModal(model: ContactsModel): Unit {
             // 打开表单即聚焦姓名——Modal 会把每帧 Frame 事件转发进对话框子树，autofocus 因此生效；
             // 关闭后其局部状态随裁剪回收，下次打开会再次自动聚焦。
             formField("姓名", "contacts.form.name", model.draftName, autofocus: true)
-            formField("公司", "contacts.form.company", model.draftCompany)
+            // 对话框内的组合框：其建议列表压在对话框浮层之上（浮层栈），输入过滤、点选填入都
+            // 与页面级组合框一致；也允许键入建议之外的公司。
+            HStack {
+                Label("公司").width(56.vp)
+                ComboBox("contacts.form.company", model.draftCompany, companySuggestions()).flex()
+            }.crossAxisAlignment(CrossAxisAlignment.Center).flexible(false)
             formField("职务", "contacts.form.role", model.draftRole)
             formField("邮箱", "contacts.form.email", model.draftEmail)
             HStack {

@@ -32,12 +32,16 @@ public class ContextMenu <: Widget {
     private let menuX: State<Float32>
     private let menuY: State<Float32>
     private let highlight: State<Int64>
+    // Identifies this menu on the overlay stack across per-frame rebuilds, so closing
+    // removes exactly its own registration (a dialog beneath it stays open).
+    private let overlayOwner: String
     private var frame = Rect.zero()
 
     public init(items!: Array<MenuItem>, body!: () -> Unit) {
         this.child = buildChild(body)
         this.items = items
         let key = controlIdentity("ContextMenu")
+        this.overlayOwner = key
         this.open = localState<Bool>("${key}:open") {false}
         this.menuX = localState<Float32>("${key}:x") {0.0}
         this.menuY = localState<Float32>("${key}:y") {0.0}
@@ -58,7 +62,8 @@ public class ContextMenu <: Widget {
         child.draw(ctx)
         if (open.value && !items.isEmpty()) {
             let menu = menuRect(ctx)
-            ctx.setOverlay(Overlay(handleEvent: {c, e => handleMenu(c, e, menu)}, render: {c => drawMenu(c, menu)}))
+            ctx.setOverlay(Overlay(handleEvent: {c, e => handleMenu(c, e, menu)},
+                render: {c => drawMenu(c, menu)}, owner: overlayOwner))
         }
     }
 
@@ -97,6 +102,10 @@ public class ContextMenu <: Widget {
 
     public func focusableId(): ?String {
         child.focusableId()
+    }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
     }
 
     private func handleMenu(ctx: UiContext, event: UiEvent, menu: Rect): Bool {
@@ -146,10 +155,15 @@ public class ContextMenu <: Widget {
 
     private func close(ctx: UiContext): Unit {
         open.value = false
-        ctx.clearActiveOverlay()
+        ctx.removeOverlay(overlayOwner)
     }
 
+    // Maps a pointer y inside the menu to an item index; the padding strips above and
+    // below the rows hit nothing (-1), so a press there neither runs nor highlights.
     private func itemIndexAt(menu: Rect, y: Float32): Int64 {
+        if (y < menu.y + MENU_PAD || y >= menu.bottom() - MENU_PAD) {
+            return -1
+        }
         Int64((y - menu.y - MENU_PAD) / CUI_SMALL_H)
     }
 

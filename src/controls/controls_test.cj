@@ -1,7 +1,7 @@
 package cui.controls
 
 import sdl.{Key, MouseButton, Rect, Renderer, Size, UiEvent}
-import cui.core.{Spacer, State, StateStore, Theme, UiContext, Widget, buildRoot, emit}
+import cui.core.{Button, Modal, Spacer, State, StateStore, Theme, UiContext, Widget, buildRoot, emit}
 
 private func controlTestContext(): UiContext {
     UiContext(Renderer.headless(), Theme.light())
@@ -166,6 +166,235 @@ func dropdownArrowsMoveHighlightWhileOpen(): Unit {
     @Expect(selected.value, Int64(2))
     let _ = ctx.dispatchOverlay(UiEvent.KeyDown(Key.Up, false))
     @Expect(selected.value, Int64(1))
+}
+
+// A dropdown inside a modal dialog — the nesting the overlay stack exists for. The popup
+// registers above the dialog and wins its clicks; selecting closes only the popup, and the
+// dialog dismisses on a later Escape.
+@Test
+func dropdownInsideModalSelectsWithoutClosingDialog(): Unit {
+    let ctx = controlTestContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 400.0
+    let presented = State<Bool>(true)
+    let selected = State<Int64>(0)
+    let modal = Modal(presented) {
+        Dropdown("city", ["北京", "上海", "广州"], selected)
+    }
+    modal.layout(ctx, Rect.zero())
+    modal.draw(ctx)
+    @Expect(ctx.overlayCount(), Int64(1))
+
+    // The dropdown measures 190x34, so the dialog centres at (83,161,234,78) and the control
+    // sits at (105,183,190,34). A press inside, routed through the dialog, opens the popup;
+    // drawing the stack registers it above the dialog within the same frame.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 110.0, 190.0)))
+    ctx.drawActiveOverlay()
+    @Expect(ctx.overlayCount(), Int64(2))
+
+    // The popup opens below the box at (105,221); rows start at y=226, 28px each, so y=260
+    // lands on the second item. Selecting closes the popup only — the dialog stays open.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 120.0, 260.0)))
+    @Expect(selected.value, Int64(1))
+    @Expect(ctx.overlayCount(), Int64(1))
+    @Expect(presented.value)
+
+    // With the popup gone, Escape reaches the dialog and dismisses it.
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Escape, false)))
+    @Expect(!presented.value)
+    @Expect(!ctx.hasOverlay())
+}
+
+// A long list scrolls inside the popup: the wheel moves the window, hit-testing follows the
+// offset, keyboard navigation keeps the highlight visible, and the padding strips hit nothing.
+@Test
+func dropdownLongListScrollsInsidePopup(): Unit {
+    let ctx = controlTestContext()
+    ctx.viewportWidth = 300.0
+    ctx.viewportHeight = 300.0
+    let selected = State<Int64>(0)
+    let dropdown = Dropdown("long", Array<String>(30, {i => "项 ${i}"}), selected)
+    dropdown.layout(ctx, Rect(20.0, 40.0, 180.0, 34.0))
+
+    // Below the control there are 218px, above only 32px: the popup opens below at 218px
+    // (20,78,180,218) and the 840px list scrolls inside a 208px window.
+    let _ = dropdown.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 30.0, 50.0))
+    dropdown.draw(ctx)
+    @Expect(ctx.hasOverlay())
+
+    // One wheel notch scrolls 72px; a click at y=88 then lands on row (88-83+72)/28 = 2.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseWheel(0.0, -1.0, 100.0, 150.0)))
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 100.0, 88.0)))
+    @Expect(selected.value, Int64(2))
+    @Expect(!ctx.hasOverlay())
+
+    // Reopen (row 2 reveals near the top, unscrolled); a press in the top padding strip
+    // (y=80 < 83) hits nothing — the popup dismisses without changing the selection.
+    let _ = dropdown.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 30.0, 50.0))
+    dropdown.draw(ctx)
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 100.0, 80.0)))
+    @Expect(selected.value, Int64(2))
+    @Expect(!ctx.hasOverlay())
+
+    // Reopen and walk down with the keyboard: the window scrolls to keep the highlight
+    // visible. After reaching row 12 the offset is 12*28+28-208 = 156, so a click near the
+    // top of the list (y=84) lands on row (84-83+156)/28 = 5 — not row 0.
+    let _ = dropdown.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 30.0, 50.0))
+    dropdown.draw(ctx)
+    var presses = 0
+    while (presses < 10) {
+        let _ = ctx.dispatchOverlay(UiEvent.KeyDown(Key.Down, false))
+        presses += 1
+    }
+    @Expect(selected.value, Int64(12))
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 100.0, 84.0)))
+    @Expect(selected.value, Int64(5))
+    @Expect(!ctx.hasOverlay())
+}
+
+// The popup scrollbar rides in the standard right-edge lane: grabbing the thumb neither
+// selects nor closes, and dragging it scrolls the window.
+@Test
+func dropdownPopupScrollbarDragsAndStaysOpen(): Unit {
+    let ctx = controlTestContext()
+    ctx.viewportWidth = 300.0
+    ctx.viewportHeight = 300.0
+    let selected = State<Int64>(0)
+    let dropdown = Dropdown("bar", Array<String>(30, {i => "row ${i}"}), selected)
+    dropdown.layout(ctx, Rect(20.0, 40.0, 180.0, 34.0))
+    let _ = dropdown.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 30.0, 50.0))
+    dropdown.draw(ctx)
+
+    // The bar lane hugs the popup's right edge (x in 192..198); the thumb starts at the top.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 195.0, 90.0)))
+    @Expect(ctx.hasOverlay()) // grabbing the bar neither selects nor closes
+    ctx.leftMouseDown = true
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseMove(195.0, 200.0)))
+    ctx.leftMouseDown = false
+    ctx.clearDrag()
+
+    // After the drag a click near the top of the list lands deep in the list, proving the
+    // window scrolled (offset ≈ 453 → row 16); an unscrolled window would select row 0.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 100.0, 90.0)))
+    @Expect(selected.value > Int64(5))
+    @Expect(!ctx.hasOverlay())
+}
+
+// A column's custom cell painter replaces its text rendering: it runs once per visible row
+// inside the cell clip, receives the original row index paired with that row's value, and
+// sorting still reorders by the string value under the column's numeric rule.
+@Test
+func tableCustomCellPainterFollowsDisplayOrder(): Unit {
+    let ctx = controlTestContext()
+    let selected = State<Int64>(-1)
+    let painted = State<String>("")
+    let painter: (UiContext, Int64, String, Rect) -> Unit = {
+        _, row, value, cell =>
+        painted.value = painted.value + "(${row}:${value}@${Int64(cell.x)})"
+    }
+    let columns: Array<TableColumn> = [
+        TableColumn("名称", 100.0),
+        TableColumn("进度", 120.0, numeric: true, cell: painter)
+    ]
+    let rows: Array<Array<String>> = [["乙", "30%"], ["甲", "90%"], ["丙", "60%"]]
+    let table = Table("cells", columns, rows, selected)
+    table.layout(ctx, Rect(0.0, 0.0, 260.0, 200.0))
+
+    table.draw(ctx)
+    @Expect(painted.value, "(0:30%@100)(1:90%@100)(2:60%@100)")
+
+    // Sort by the progress column (numeric ascending): the painter runs in the new display
+    // order, each invocation still pairing an original row index with its own value.
+    let _ = table.handle(ctx, UiEvent.MouseDown(MouseButton.Left, 150.0, 10.0))
+    painted.value = ""
+    table.draw(ctx)
+    @Expect(painted.value, "(0:30%@100)(2:60%@100)(1:90%@100)")
+}
+
+// SegmentedControl joins the focus ring: Left/Right switch the selected segment while it
+// holds focus (clamped at the ends) and pass through untouched otherwise.
+@Test
+func segmentedControlKeyboardSwitchesSegments(): Unit {
+    let ctx = controlTestContext()
+    let store = StateStore()
+    let choice = State<Int64>(1)
+    let captured = State<?Widget>(None)
+    let _ = buildRoot({
+        => captured.value = Some(SegmentedControl(["日", "周", "月"], choice))
+    }, store)
+    let ring = store.focusRing()
+    @Expect(ring.size, 1) // the control registered exactly one focus stop
+
+    let control = captured.value.getOrThrow()
+    control.layout(ctx, Rect(0.0, 0.0, 288.0, 34.0))
+    @Expect(!control.handle(ctx, UiEvent.KeyDown(Key.Right, false))) // unfocused: not consumed
+    @Expect(choice.value, Int64(1))
+
+    ctx.focus(ring[0])
+    @Expect(control.handle(ctx, UiEvent.KeyDown(Key.Right, false)))
+    @Expect(choice.value, Int64(2))
+    let _ = control.handle(ctx, UiEvent.KeyDown(Key.Right, false))
+    @Expect(choice.value, Int64(2)) // clamped at the last segment
+    @Expect(control.handle(ctx, UiEvent.KeyDown(Key.Left, false)))
+    @Expect(choice.value, Int64(1))
+}
+
+// TabView's strip is a focus stop ahead of its page content: Left/Right switch tabs while
+// the strip has focus and fall through to the active page otherwise.
+@Test
+func tabViewKeyboardSwitchesTabs(): Unit {
+    let ctx = controlTestContext()
+    let store = StateStore()
+    let page = State<Int64>(0)
+    let captured = State<?Widget>(None)
+    let _ = buildRoot({
+        =>
+        captured.value = Some(TabView(["概览", "设置"], page) {
+            Spacer()
+            Spacer()
+        })
+    }, store)
+    let ring = store.focusRing()
+    @Expect(ring.size, 1) // the strip registered exactly one focus stop
+
+    let tabs = captured.value.getOrThrow()
+    tabs.layout(ctx, Rect(0.0, 0.0, 400.0, 300.0))
+    @Expect(!tabs.handle(ctx, UiEvent.KeyDown(Key.Right, false))) // unfocused: falls to the page
+    @Expect(page.value, Int64(0))
+
+    ctx.focus(ring[0])
+    @Expect(tabs.handle(ctx, UiEvent.KeyDown(Key.Right, false)))
+    @Expect(page.value, Int64(1))
+    @Expect(tabs.handle(ctx, UiEvent.KeyDown(Key.Left, false)))
+    @Expect(page.value, Int64(0))
+}
+
+// Focus stops on hidden tab pages are dead ends (only the active page receives events), so
+// the build takes them out of the ring; switching tabs re-registers on the next rebuild.
+@Test
+func tabViewHiddenPageLeavesFocusRing(): Unit {
+    let store = StateStore()
+    let page = State<Int64>(0)
+    let build = {
+        =>
+        let _ = buildRoot({
+            =>
+            let _ = TabView(["一", "二"], page) {
+                Button("甲", {=> ()}).id("p1.a")
+                Button("乙", {=> ()}).id("p2.a")
+            }
+        }, store)
+    }
+    build()
+    let first = store.focusRing()
+    @Expect(first.size, 2) // the strip plus the active page's button
+    @Expect(first[1], "p1.a")
+
+    page.value = 1
+    build()
+    let second = store.focusRing()
+    @Expect(second.size, 2)
+    @Expect(second[1], "p2.a")
 }
 
 @Test

@@ -41,3 +41,35 @@ func cursorBlinksInPhaseWithSharedFrameClock(): Unit {
     ctx.frame = FrameInfo(UInt64(1060), UInt64(0))
     @Expect(textCursorVisible(ctx))
 }
+
+// A focused text control reports its caret rectangle as the IME anchor during draw — in
+// BOTH blink phases (the phase only gates painting) — so the shell can keep the candidate
+// window at the caret. Without focus nothing is reported.
+@Test
+func focusedCaretReportsImeAnchorInBothBlinkPhases(): Unit {
+    let ctx = UiContext(Renderer.headless(), Theme.light())
+    let frame = Rect(10.0, 20.0, 200.0, 38.0)
+
+    // Unfocused: no anchor.
+    drawTextFieldCursor(ctx, frame, "field", "abc", 3)
+    @Expect(ctx.textInputAnchorRect().isNone())
+
+    // Focused, visible phase: the anchor is the caret rect (x = 10 + 8 pad + 3*8.25).
+    ctx.focus("field")
+    ctx.frame = FrameInfo(UInt64(0), UInt64(0))
+    drawTextFieldCursor(ctx, frame, "field", "abc", 3)
+    let visiblePhase = ctx.textInputAnchorRect().getOrThrow()
+    @Expect(visiblePhase.x, Float32(42.75))
+
+    // Hidden phase: painting is skipped but the anchor is still reported.
+    ctx.clearTextInputAnchor()
+    ctx.frame = FrameInfo(UInt64(530), UInt64(530))
+    drawTextFieldCursor(ctx, frame, "field", "abc", 3)
+    let hiddenPhase = ctx.textInputAnchorRect().getOrThrow()
+    @Expect(hiddenPhase.x, Float32(42.75))
+
+    // The anchor follows the caret byte position.
+    ctx.clearTextInputAnchor()
+    drawTextFieldCursor(ctx, frame, "field", "abc", 1)
+    @Expect(ctx.textInputAnchorRect().getOrThrow().x, Float32(26.25))
+}

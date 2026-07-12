@@ -10,8 +10,9 @@ internal let CUI_SCROLL_WHEEL_STEP: Float32 = 72.0
 /**
  * Viewport width a scrollable container reserves for the bar once content overflows,
  * so the bar rides in its own lane instead of covering the content's right edge.
+ * Module-visible: popup lists (Dropdown/ComboBox) reserve the same lane.
  */
-internal func scrollBarGutter(): Float32 {
+protected func scrollBarGutter(): Float32 {
     CUI_SCROLL_W + CUI_SCROLL_MARGIN * 2.0
 }
 

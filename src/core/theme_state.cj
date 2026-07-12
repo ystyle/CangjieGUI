@@ -1,5 +1,6 @@
 package cui.core
 
+import std.collection.ArrayList
 import sdl.{Color, FrameInfo, Insets, Rect, Renderer, SurfaceStyle, UiEvent}
 
 // A second press within this window and distance of the previous one continues a multi-click.
@@ -207,7 +208,11 @@ public class UiContext {
     /** Logical size of the drawing surface; overlays clamp their popups to it. */
     public var viewportWidth: Float32 = 0.0
     public var viewportHeight: Float32 = 0.0
-    private var activeOverlay: ?Overlay = None
+    // Interactive overlays open this frame, bottom to top. Registration order is z-order:
+    // the tree draws first (a Modal registers its dialog), then the overlay render pass
+    // draws each layer's content, so a popup opened inside a dialog registers — and
+    // paints — above it. Events walk the stack top-down (see `dispatchOverlay`).
+    private let overlays = ArrayList<Overlay>()
     /** Physical pixels per virtual pixel; set from the window content scale. */
     public var displayScale: Float32 = 1.0
     /** User font scale applied to `fp` lengths; `1.0` keeps `fp` equal to `vp`. */
@@ -412,40 +417,117 @@ public class UiContext {
         tooltipText = ""
     }
 
-    /** Registers the interactive overlay (a dropdown/menu popup) for this frame. */
-    public func setOverlay(overlay: Overlay): Unit {
-        activeOverlay = Some(overlay)
+    // Where the focused text control wants the IME composition UI anchored, in logical
+    // pixels: the caret rectangle it reported during draw (blink phase or not). The shell
+    // forwards changes to the window, so the candidate window follows the caret instead
+    // of sitting in a screen corner.
+    private var textInputAnchor: ?Rect = None
+
+    /** Reports the focused caret rectangle this frame, anchoring the IME candidate window. */
+    public func setTextInputAnchor(rect: Rect): Unit {
+        textInputAnchor = Some(rect)
     }
 
-    /** Removes the active overlay — called by the shell each frame and by a closing popup. */
-    public func clearActiveOverlay(): Unit {
-        activeOverlay = None
+    /** Clears the reported caret anchor; the shell calls this before drawing each frame. */
+    public func clearTextInputAnchor(): Unit {
+        textInputAnchor = None
     }
 
-    /** Whether an interactive overlay is currently open. */
-    public func hasOverlay(): Bool {
-        match (activeOverlay) {
-            case Some(_) => true
-            case None => false
-        }
+    /** The caret rectangle reported during this frame's draw, if a text control has focus. */
+    public func textInputAnchorRect(): ?Rect {
+        textInputAnchor
     }
 
     /**
-     * Gives the active overlay first chance at an event; returns whether it consumed it.
-     * Public so a custom shell (not just `DesktopApp`) can route events through the overlay.
+     * Registers an interactive overlay (a dropdown/menu popup, a dialog) for this frame,
+     * above those already open. Re-registering under an already-present `owner` replaces
+     * that entry in place, keeping its z position.
      */
-    public func dispatchOverlay(event: UiEvent): Bool {
-        match (activeOverlay) {
-            case Some(overlay) => overlay.dispatch(this, event)
-            case None => false
+    public func setOverlay(overlay: Overlay): Unit {
+        if (!overlay.owner.isEmpty()) {
+            for (i in 0..overlays.size) {
+                if (overlays[i].owner == overlay.owner) {
+                    overlays[i] = overlay
+                    return
+                }
+            }
+        }
+        overlays.add(overlay)
+    }
+
+    /**
+     * Removes the overlay registered under `owner`, leaving the rest of the stack open —
+     * a closing popup removes exactly its own registration, never a dialog beneath it.
+     */
+    public func removeOverlay(owner: String): Unit {
+        if (owner.isEmpty()) {
+            return
+        }
+        var i = overlays.size - 1
+        while (i >= 0) {
+            if (overlays[i].owner == owner) {
+                overlays.remove(at: i)
+            }
+            i -= 1
         }
     }
 
-    /** Paints the active overlay above the tree; a custom shell calls this after the tree. */
+    /** Removes every open overlay — the shell calls this each frame before the tree re-registers. */
+    public func clearActiveOverlay(): Unit {
+        overlays.clear()
+    }
+
+    /** Whether any interactive overlay is currently open. */
+    public func hasOverlay(): Bool {
+        !overlays.isEmpty()
+    }
+
+    /** How many interactive overlays are currently open (a dialog plus its popup counts two). */
+    public func overlayCount(): Int64 {
+        overlays.size
+    }
+
+    /**
+     * Offers `event` to the open overlays, top-most first; returns whether one consumed it.
+     * A layer that does not consume lets the event fall to the layer beneath — a Modal
+     * consumes everything, so events never pass a dialog into the backdrop tree. Public so
+     * a custom shell (not just `DesktopApp`) can route events through the overlays.
+     */
+    public func dispatchOverlay(event: UiEvent): Bool {
+        // Walk a snapshot: a handler may close (remove) overlays mid-dispatch. An entry
+        // removed by a layer above it is skipped rather than offered a stale event.
+        let snapshot = overlays.toArray()
+        var i = snapshot.size - 1
+        while (i >= 0) {
+            let overlay = snapshot[i]
+            if (isRegistered(overlay) && overlay.dispatch(this, event)) {
+                return true
+            }
+            i -= 1
+        }
+        false
+    }
+
+    private func isRegistered(overlay: Overlay): Bool {
+        for (candidate in overlays) {
+            if (refEq(candidate, overlay)) {
+                return true
+            }
+        }
+        false
+    }
+
+    /**
+     * Paints the open overlays bottom to top, after the tree; a custom shell calls this
+     * once per frame. Rendering a layer may register further overlays (a dropdown open
+     * inside a dialog registers while the dialog's body draws) — the loop picks them up
+     * and paints them above, within the same frame.
+     */
     public func drawActiveOverlay(): Unit {
-        match (activeOverlay) {
-            case Some(overlay) => overlay.render(this)
-            case None => ()
+        var i = 0
+        while (i < overlays.size) {
+            overlays[i].render(this)
+            i += 1
         }
     }
 

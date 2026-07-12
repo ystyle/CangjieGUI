@@ -211,6 +211,17 @@ protected func reregisterFocusable(previous: String, replacement: String): Unit 
     }
 }
 
+/** Concatenates the focus stops of `children` in declaration order (container helper). */
+protected func collectFocusableIds(children: Array<Widget>): Array<String> {
+    let ids = ArrayList<String>()
+    for (child in children) {
+        for (id in child.focusableIds()) {
+            ids.add(id)
+        }
+    }
+    ids.toArray()
+}
+
 /*
  * Claims the pointer shape for `id` when a MouseMove falls inside `frame`. Controls call
  * this at the top of `handle` without consuming the event, so hover propagates to every

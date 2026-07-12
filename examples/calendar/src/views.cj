@@ -8,13 +8,14 @@
  */
 package cui_calendar
 
-import cui.{Button, ButtonRole, FontSizes, ForEachIndexed, HStack, IconButton, IconName, Label, LengthUnits, Panel,
-    Spacer, TabView, TextAlign, VStack, Widget, emit}
+import cui.{Button, ButtonRole, FontSizes, ForEachIndexed, HStack, IconButton, IconName, ImageView, Label,
+    LengthUnits, Panel, Spacer, TabView, TextAlign, VStack, emit}
 
-func calendarView(model: CalendarModel, badge: Widget): Unit {
+func calendarView(model: CalendarModel): Unit {
     VStack {
         HStack {
-            emit(badge)
+            // 逐帧内联声明即可：解码后的纹理按路径缓存在共享缓存里，重建不触碰磁盘。
+            ImageView(CALENDAR_BADGE).width(40.vp).height(30.vp)
             Label(model.title.value).fontSize(FontSizes.TITLE)
             Spacer()
             IconButton(IconName.ChevronLeft) {

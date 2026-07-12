@@ -1,24 +1,37 @@
 package cui.controls
 
 import sdl.{Color, FontSizes, Key, MouseButton, Pen, Rect, Size, SurfaceStyle, UiEvent}
-import cui.core.{Bindable, CUI_CONTROL_H, CUI_SMALL_H, CursorShape, Overlay, State, UiContext, Widget,
-    claimHoverIfInside, drawSurface, emit, localState, registerFocusable}
+import cui.core.{Bindable, CUI_CONTROL_H, CUI_SMALL_H, CursorShape, Overlay, ScrollBar, State, UiContext, Widget,
+    claimHoverIfInside, clampScrollOffset, drawSurface, drawVerticalScrollBar, emit, localState, registerFocusable,
+    scrollBarGutter, scrollOffsetAfterWheel}
 
 private let DROPDOWN_DEFAULT_W: Float32 = 190.0
 private let DROPDOWN_POPUP_PAD: Float32 = 5.0
 private let DROPDOWN_GAP: Float32 = 4.0
+private let DROPDOWN_MARGIN: Float32 = 4.0
 
 /*
  * A dropdown select: a closed box showing the current item, and, when opened, a popup list
  * floated above the tree via the interactive overlay. Clicking an item selects and closes;
  * clicking outside or pressing Escape dismisses; arrows move the highlight while open. Because
  * the popup is an overlay, its clicks are never stolen by whatever is drawn beneath it.
+ *
+ * A list taller than the space around the control scrolls inside the popup: mouse wheel, a
+ * draggable scrollbar in the standard lane, and arrow keys that keep the highlight in view.
+ * The popup opens on whichever side (below, else above) has room, with the selected row
+ * scrolled into view.
  */
 public class Dropdown <: Widget {
     private let id: String
     private let items: Array<String>
     private let selected: Bindable<Int64>
     private let open: State<Bool>
+    // Identifies this control's popup on the overlay stack across per-frame rebuilds, so
+    // closing removes exactly its own registration (a dialog beneath it stays open).
+    private let overlayOwner: String
+    // Scroll offset of the popup list, retained across the per-frame rebuild while open.
+    private let popupScroll: State<Float32>
+    private let popupBar: ScrollBar
     private var frame = Rect.zero()
 
     public init(id: String, items: Array<String>, selected: Bindable<Int64>) {
@@ -28,7 +41,10 @@ public class Dropdown <: Widget {
         this.id = id
         this.items = items
         this.selected = selected
+        this.overlayOwner = "Dropdown:${id}"
         this.open = localState<Bool>("Dropdown:${id}:open") {false}
+        this.popupScroll = localState<Float32>("Dropdown:${id}:popupScroll") {0.0}
+        this.popupBar = ScrollBar("Dropdown:${id}:popupBar")
         registerFocusable(id)
         emit(this)
     }
@@ -54,7 +70,8 @@ public class Dropdown <: Widget {
         // gets events before the tree (see the shell's dispatch order).
         if (open.value) {
             let popup = popupRect(ctx)
-            ctx.setOverlay(Overlay(handleEvent: {c, e => handleOverlay(c, e, popup)}, render: {c => drawPopup(c, popup)}))
+            ctx.setOverlay(Overlay(handleEvent: {c, e => handleOverlay(c, e, popup)},
+                render: {c => drawPopup(c, popup)}, owner: overlayOwner))
         }
     }
 
@@ -64,7 +81,7 @@ public class Dropdown <: Widget {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y)) {
                     ctx.focus(id)
-                    open.value = true // when already open the overlay handles the click, not this
+                    openPopup(ctx) // when already open the overlay handles the click, not this
                     return true
                 }
             case UiEvent.KeyDown(Key.Enter, _) => return openIfFocused(ctx)
@@ -81,10 +98,32 @@ public class Dropdown <: Widget {
 
     private func openIfFocused(ctx: UiContext): Bool {
         if (ctx.hasFocus(id)) {
-            open.value = true
+            openPopup(ctx)
             return true
         }
         false
+    }
+
+    // Opens the popup with the selected row scrolled into view (centred when the list is
+    // long), so reopening never lands far from the current value.
+    private func openPopup(ctx: UiContext): Unit {
+        open.value = true
+        let listH = listHeight(popupRect(ctx))
+        let target = Float32(selected.value) * CUI_SMALL_H - (listH - CUI_SMALL_H) / 2.0
+        popupScroll.value = clampScrollOffset(target, contentHeight(), listH)
+    }
+
+    private func contentHeight(): Float32 {
+        Float32(items.size) * CUI_SMALL_H
+    }
+
+    private func listHeight(popup: Rect): Float32 {
+        max(0.0, popup.h - DROPDOWN_POPUP_PAD * 2.0)
+    }
+
+    /** The inner list area: the popup minus its top and bottom padding strips. */
+    private func listRect(popup: Rect): Rect {
+        Rect(popup.x, popup.y + DROPDOWN_POPUP_PAD, popup.w, listHeight(popup))
     }
 
     // The overlay event handler while the popup is open. Runs before the tree, so it can claim
@@ -93,6 +132,9 @@ public class Dropdown <: Widget {
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (popup.contains(x, y)) {
+                    if (popupBar.press(ctx, listRect(popup), popupScroll, contentHeight(), listHeight(popup), x, y)) {
+                        return true // the press grabbed the scrollbar; the popup stays open
+                    }
                     let index = itemIndexAt(popup, y)
                     if (index >= 0 && index < items.size) {
                         selected.value = index
@@ -100,6 +142,16 @@ public class Dropdown <: Widget {
                 }
                 close(ctx) // select-and-close, or dismiss on an outside click
                 true
+            case UiEvent.MouseMove(_, y) =>
+                // While the thumb is grabbed the move scrolls the list; hover falls through.
+                popupBar.drag(ctx, listRect(popup), popupScroll, contentHeight(), listHeight(popup), y)
+            case UiEvent.MouseWheel(_, wheelY, x, y) =>
+                if (popup.contains(x, y)) {
+                    popupScroll.value = scrollOffsetAfterWheel(popupScroll.value, wheelY, contentHeight(),
+                        listHeight(popup))
+                    return true
+                }
+                false
             case UiEvent.KeyDown(Key.Escape, _) =>
                 close(ctx)
                 true
@@ -110,10 +162,10 @@ public class Dropdown <: Widget {
                 close(ctx)
                 true
             case UiEvent.KeyDown(Key.Down, _) =>
-                moveHighlight(1)
+                moveHighlight(1, popup)
                 true
             case UiEvent.KeyDown(Key.Up, _) =>
-                moveHighlight(-1)
+                moveHighlight(-1, popup)
                 true
             case UiEvent.KeyDown(Key.Tab, _) =>
                 close(ctx) // commit and let the shell's Tab traversal move focus on
@@ -124,36 +176,88 @@ public class Dropdown <: Widget {
 
     private func close(ctx: UiContext): Unit {
         open.value = false
-        ctx.clearActiveOverlay()
+        ctx.removeOverlay(overlayOwner)
     }
 
-    private func moveHighlight(delta: Int64): Unit {
-        if (!items.isEmpty()) {
-            selected.value = clampDropdownIndex(selected.value + delta, items.size)
+    private func moveHighlight(delta: Int64, popup: Rect): Unit {
+        if (items.isEmpty()) {
+            return
+        }
+        selected.value = clampDropdownIndex(selected.value + delta, items.size)
+        revealRow(selected.value, popup)
+    }
+
+    // Scrolls just enough to keep the highlighted row visible — the reveal convention
+    // shared with ListView and Table keyboard navigation.
+    private func revealRow(index: Int64, popup: Rect): Unit {
+        let listH = listHeight(popup)
+        let rowTop = Float32(index) * CUI_SMALL_H
+        var next = popupScroll.value
+        if (rowTop < next) {
+            next = rowTop
+        }
+        if (rowTop + CUI_SMALL_H > next + listH) {
+            next = rowTop + CUI_SMALL_H - listH
+        }
+        let clamped = clampScrollOffset(next, contentHeight(), listH)
+        if (clamped != popupScroll.value) {
+            popupScroll.value = clamped
         }
     }
 
+    // Maps a pointer y inside the popup to an item index, honouring the scroll offset.
+    // The padding strips above and below the list hit nothing (-1).
     private func itemIndexAt(popup: Rect, y: Float32): Int64 {
-        Int64((y - popup.y - DROPDOWN_POPUP_PAD) / CUI_SMALL_H)
+        if (y < popup.y + DROPDOWN_POPUP_PAD || y >= popup.bottom() - DROPDOWN_POPUP_PAD) {
+            return -1
+        }
+        Int64((y - popup.y - DROPDOWN_POPUP_PAD + popupScroll.value) / CUI_SMALL_H)
     }
 
+    /*
+     * Anchors the popup below the control, flipping above when only the space above fits the
+     * whole list. When neither side fits, it opens on the roomier side at that side's height
+     * and the list scrolls inside (see drawPopup).
+     */
     private func popupRect(ctx: UiContext): Rect {
-        let fullHeight = Float32(items.size) * CUI_SMALL_H + DROPDOWN_POPUP_PAD * 2.0
-        let height = min(fullHeight, max(CUI_SMALL_H, ctx.viewportHeight - 8.0))
-        var y = frame.bottom() + DROPDOWN_GAP
-        if (y + height > ctx.viewportHeight && frame.y - DROPDOWN_GAP - height >= 0.0) {
-            y = frame.y - DROPDOWN_GAP - height // flip above the control when it would overflow
+        let fullHeight = contentHeight() + DROPDOWN_POPUP_PAD * 2.0
+        let below = max(0.0, ctx.viewportHeight - DROPDOWN_MARGIN - (frame.bottom() + DROPDOWN_GAP))
+        let above = max(0.0, frame.y - DROPDOWN_GAP - DROPDOWN_MARGIN)
+        if (fullHeight <= below) {
+            return Rect(frame.x, frame.bottom() + DROPDOWN_GAP, frame.w, fullHeight)
         }
-        Rect(frame.x, y, frame.w, height)
+        if (fullHeight <= above) {
+            return Rect(frame.x, frame.y - DROPDOWN_GAP - fullHeight, frame.w, fullHeight)
+        }
+        let height = max(CUI_SMALL_H + DROPDOWN_POPUP_PAD * 2.0, max(below, above))
+        if (below >= above) {
+            Rect(frame.x, frame.bottom() + DROPDOWN_GAP, frame.w, height)
+        } else {
+            Rect(frame.x, frame.y - DROPDOWN_GAP - height, frame.w, height)
+        }
     }
 
     private func drawPopup(ctx: UiContext, popup: Rect): Unit {
         drawSurface(ctx, popup, popupSurface(ctx))
-        ctx.renderer.pushClip(popup)
-        var y = popup.y + DROPDOWN_POPUP_PAD
-        var i = 0
-        while (i < items.size && y < popup.bottom()) {
-            let row = Rect(popup.x + 4.0, y, max(0.0, popup.w - 8.0), CUI_SMALL_H)
+        let contentH = contentHeight()
+        let listH = listHeight(popup)
+        let list = listRect(popup)
+        // The item set can change while open; keep the retained offset within range.
+        let offset = clampScrollOffset(popupScroll.value, contentH, listH)
+        if (offset != popupScroll.value) {
+            popupScroll.value = offset
+        }
+        let gutter: Float32 = if (contentH > listH) {
+            scrollBarGutter()
+        } else {
+            0.0
+        }
+        let rowW = max(0.0, popup.w - 8.0 - gutter)
+        ctx.renderer.pushClip(list)
+        var i = Int64(offset / CUI_SMALL_H)
+        var y = list.y - (offset - Float32(i) * CUI_SMALL_H)
+        while (i < items.size && y < list.bottom()) {
+            let row = Rect(popup.x + 4.0, y, rowW, CUI_SMALL_H)
             if (i == selected.value) {
                 ctx.renderer.fillRoundedRect(row, ctx.theme.smallRadius, ctx.theme.accent)
                 drawRowLabel(ctx, items[i], row, ctx.theme.accentText)
@@ -167,6 +271,7 @@ public class Dropdown <: Widget {
             i += 1
         }
         ctx.renderer.popClip()
+        drawVerticalScrollBar(ctx, list, offset, contentH, listH, active: popupBar.dragging(ctx))
     }
 
     // A down chevron drawn as two strokes, so it never depends on a font glyph.

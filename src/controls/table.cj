@@ -11,16 +11,31 @@ private let TABLE_CELL_PAD: Float32 = 10.0
 /*
  * One column of a `Table`: a header title, a fixed pixel width, and whether its cells hold
  * numbers. Numeric columns are right-aligned and sort by numeric value rather than lexically.
+ *
+ * `cell` optionally replaces the text rendering with a custom painter — progress bars, colour
+ * chips, badges. It receives the original row index, the cell's string value, and the cell
+ * rectangle, and owns those pixels (the table has already painted the row background/selection
+ * and clips the painter to the cell). Sorting still uses the string value under the column's
+ * `numeric` rule, so what a cell shows and what it sorts by stay decoupled: "87%" can render as
+ * a bar yet sort as 87. Painters draw only — cells receive no events; the row click still
+ * selects, like every other cell.
  */
 public class TableColumn {
     let title: String
     let width: Float32
     let numeric: Bool
+    let cell: ?(UiContext, Int64, String, Rect) -> Unit
 
-    public init(title: String, width: Float32, numeric!: Bool = false) {
+    public init(
+        title: String,
+        width: Float32,
+        numeric!: Bool = false,
+        cell!: ?(UiContext, Int64, String, Rect) -> Unit = None
+    ) {
         this.title = title
         this.width = width
         this.numeric = numeric
+        this.cell = cell
     }
 }
 
@@ -30,6 +45,8 @@ public class TableColumn {
  * table stays cheap. Clicking a header sorts by that column (click again to reverse); the
  * selection is stored as an original row index, so it follows its row across re-sorts. Keyboard
  * Up/Down/Home/End move the selection when the table holds focus, scrolling it into view.
+ * A column can replace its text rendering with a custom painter (`TableColumn.cell`) for
+ * progress bars, badges and the like, without changing how the column sorts.
  *
  * Sorting runs each frame (stable merge sort) so it always reflects live cell values; for very
  * large datasets, sort in the model and pass rows pre-ordered with no active sort column.
@@ -249,19 +266,25 @@ public class Table <: Widget {
         }
         var i = 0
         while (i < columns.size) {
-            drawCell(ctx, cellAt(rowIndex, i), columns[i], Rect(columnX(i), rowRect.y, columns[i].width, rowRect.h))
+            drawCell(ctx, rowIndex, cellAt(rowIndex, i), columns[i],
+                Rect(columnX(i), rowRect.y, columns[i].width, rowRect.h))
             i += 1
         }
     }
 
-    private func drawCell(ctx: UiContext, text: String, col: TableColumn, cell: Rect): Unit {
+    private func drawCell(ctx: UiContext, rowIndex: Int64, text: String, col: TableColumn, cell: Rect): Unit {
         ctx.renderer.pushClip(cell)
-        let ty = cell.centerY() - ctx.renderer.textHeight(pointSize: FontSizes.BODY) / 2.0
-        if (col.numeric) {
-            let tw = ctx.renderer.textWidth(text, pointSize: FontSizes.BODY)
-            ctx.renderer.text(text, cell.right() - TABLE_CELL_PAD - tw, ty, ctx.theme.text, pointSize: FontSizes.BODY)
-        } else {
-            ctx.renderer.text(text, cell.x + TABLE_CELL_PAD, ty, ctx.theme.text, pointSize: FontSizes.BODY)
+        match (col.cell) {
+            case Some(paint) => paint(ctx, rowIndex, text, cell)
+            case None =>
+                let ty = cell.centerY() - ctx.renderer.textHeight(pointSize: FontSizes.BODY) / 2.0
+                if (col.numeric) {
+                    let tw = ctx.renderer.textWidth(text, pointSize: FontSizes.BODY)
+                    ctx.renderer.text(text, cell.right() - TABLE_CELL_PAD - tw, ty, ctx.theme.text,
+                        pointSize: FontSizes.BODY)
+                } else {
+                    ctx.renderer.text(text, cell.x + TABLE_CELL_PAD, ty, ctx.theme.text, pointSize: FontSizes.BODY)
+                }
         }
         ctx.renderer.popClip()
     }

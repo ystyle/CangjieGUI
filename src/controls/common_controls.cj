@@ -6,8 +6,9 @@ import cui.core.{Bindable, CUI_CONTROL_H, CursorShape, Spring, UiContext, Widget
 
 private let SWITCH_TRACK_W: Float32 = 40.0
 private let SWITCH_TRACK_H: Float32 = 22.0
-private let PICKER_DEFAULT_W: Float32 = 190.0
-private let STEPPER_DEFAULT_W: Float32 = 144.0
+private let PICKER_MIN_W: Float32 = 120.0
+private let PICKER_BUTTON_W: Float32 = 34.0
+private let STEPPER_BUTTON_W: Float32 = 36.0
 
 /** A binary desktop switch bound to a Boolean state. */
 public class Switch <: Widget {
@@ -175,8 +176,15 @@ public class Picker <: Widget {
         emit(this)
     }
 
-    public func measure(_: UiContext, available: Size): Size {
-        Size(min(available.w, PICKER_DEFAULT_W), CUI_CONTROL_H)
+    // Content-adaptive width: wide enough for the longest item between the two chevron
+    // zones (stable across selection changes), instead of a fixed generous default.
+    public func measure(ctx: UiContext, available: Size): Size {
+        var textW: Float32 = 0.0
+        for (item in items) {
+            textW = max(textW, ctx.renderer.textWidth(item, pointSize: FontSizes.CONTROL))
+        }
+        let natural = max(PICKER_MIN_W, textW + PICKER_BUTTON_W * 2.0 + 16.0)
+        Size(min(available.w, natural), CUI_CONTROL_H)
     }
 
     public func layout(_: UiContext, rect: Rect): Unit {
@@ -192,7 +200,7 @@ public class Picker <: Widget {
         }
         // Item text comes from application data; clip it so a long item cannot paint
         // over the chevrons or escape the control surface.
-        let labelArea = Rect(frame.x + 34.0, frame.y, max(0.0, frame.w - 68.0), frame.h)
+        let labelArea = Rect(frame.x + PICKER_BUTTON_W, frame.y, max(0.0, frame.w - PICKER_BUTTON_W * 2.0), frame.h)
         ctx.renderer.pushClip(labelArea)
         ctx.renderer.textCenter(label, labelArea, ctx.theme.text, pointSize: FontSizes.CONTROL)
         ctx.renderer.popClip()
@@ -244,11 +252,11 @@ public class Picker <: Widget {
     }
 
     private func leftButton(): Rect {
-        Rect(frame.x, frame.y, min(34.0, frame.w), frame.h)
+        Rect(frame.x, frame.y, min(PICKER_BUTTON_W, frame.w), frame.h)
     }
 
     private func rightButton(): Rect {
-        Rect(max(frame.x, frame.right() - 34.0), frame.y, min(34.0, frame.w), frame.h)
+        Rect(max(frame.x, frame.right() - PICKER_BUTTON_W), frame.y, min(PICKER_BUTTON_W, frame.w), frame.h)
     }
 }
 
@@ -291,8 +299,11 @@ public class Stepper <: Widget {
         this
     }
 
-    public func measure(_: UiContext, available: Size): Size {
-        Size(min(available.w, STEPPER_DEFAULT_W), CUI_CONTROL_H)
+    // Content-adaptive width: the value area fits the current number (with a floor so one
+    // or two digits stay stable and uncramped), plus the two step buttons.
+    public func measure(ctx: UiContext, available: Size): Size {
+        let valueW = max(40.0, ctx.renderer.textWidth("${value.value}", pointSize: FontSizes.CONTROL) + 20.0)
+        Size(min(available.w, valueW + STEPPER_BUTTON_W * 2.0), CUI_CONTROL_H)
     }
 
     public func layout(_: UiContext, rect: Rect): Unit {
@@ -369,15 +380,15 @@ public class Stepper <: Widget {
     }
 
     private func decrementButton(): Rect {
-        Rect(frame.x, frame.y, min(36.0, frame.w), frame.h)
+        Rect(frame.x, frame.y, min(STEPPER_BUTTON_W, frame.w), frame.h)
     }
 
     private func incrementButton(): Rect {
-        Rect(max(frame.x, frame.right() - 36.0), frame.y, min(36.0, frame.w), frame.h)
+        Rect(max(frame.x, frame.right() - STEPPER_BUTTON_W), frame.y, min(STEPPER_BUTTON_W, frame.w), frame.h)
     }
 
     private func valueFrame(): Rect {
-        Rect(frame.x + 36.0, frame.y, max(0.0, frame.w - 72.0), frame.h)
+        Rect(frame.x + STEPPER_BUTTON_W, frame.y, max(0.0, frame.w - STEPPER_BUTTON_W * 2.0), frame.h)
     }
 }
 

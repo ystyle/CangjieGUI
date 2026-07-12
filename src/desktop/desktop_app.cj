@@ -29,6 +29,8 @@ public class DesktopApp {
     private var pointerCursor: ?Cursor = None
     private var textCursor: ?Cursor = None
     private var appliedShape: ?CursorShape = None
+    // The caret rectangle last forwarded to the OS for IME anchoring (logical pixels).
+    private var appliedInputAnchor: ?Rect = None
 
     public init(
         spec: WindowSpec,
@@ -130,12 +132,14 @@ public class DesktopApp {
 
     /*
      * Routes one input event. Window-level events belong to the shell and are handled
-     * before the overlay, so a modal dialog can neither swallow a quit request nor keep
-     * the logical size stale through a resize. An open overlay (dropdown, menu, dialog)
-     * then sees the event before the tree, so a click inside its popup is not stolen by
-     * the control drawn underneath it. Pointer bookkeeping brackets BOTH paths: click
-     * counting and hover resolution run for overlay-hosted controls (a Modal's fields)
-     * exactly as for tree controls, keeping double-clicks and cursor shapes alive there.
+     * before the overlays, so a modal dialog can neither swallow a quit request nor keep
+     * the logical size stale through a resize. The open overlays (dropdowns, menus,
+     * dialogs) then see the event before the tree, top-most first — a click inside a
+     * popup is not stolen by the dialog or control drawn underneath it, and a dialog
+     * consumes whatever its popups decline, protecting the backdrop tree. Pointer
+     * bookkeeping brackets BOTH paths: click counting and hover resolution run for
+     * overlay-hosted controls (a Modal's fields) exactly as for tree controls, keeping
+     * double-clicks and cursor shapes alive there.
      */
     private func routeEvent(widget: Widget, event: UiEvent): Unit {
         match (event) {
@@ -188,9 +192,13 @@ public class DesktopApp {
         // Cleared before the tree so only a control hovered this frame shows a tooltip; the
         // tree registers into the slot during draw, and the overlay is painted last, on top.
         ctx.clearTooltip()
-        // Cleared before the tree so a closed popup leaves no overlay; an open control
-        // re-registers it during draw, and it is painted last, above the tree.
+        // Cleared before the tree so a closed popup leaves no overlay; each open control
+        // re-registers during draw, and the stack is painted last, above the tree —
+        // bottom-up, so a popup opened inside a dialog paints above the dialog.
         ctx.clearActiveOverlay()
+        // Cleared before the tree so only this frame's focused caret (re-reported during
+        // draw, including inside dialog overlays) anchors the IME candidate window.
+        ctx.clearTextInputAnchor()
         widget.draw(ctx)
         // Tooltips yield to an open popup or dialog — standard desktop behaviour, and it
         // stops a background control's bubble from ghosting through the modal backdrop.
@@ -198,9 +206,31 @@ public class DesktopApp {
             drawTooltip(ctx, Float32(window.width), Float32(window.height))
         }
         ctx.drawActiveOverlay()
+        applyTextInputAnchor()
         ctx.renderer.endScene()
         maybeSnapshot()
         ctx.renderer.present()
+    }
+
+    /*
+     * Forwards the focused caret rectangle to the OS whenever it moves, so the IME
+     * composition UI (candidate window) follows typing instead of sitting in a screen
+     * corner. Unchanged rectangles are skipped to avoid a per-frame system call, and a
+     * platform refusal is ignored — IME anchoring is polish, not frame-critical.
+     */
+    private func applyTextInputAnchor(): Unit {
+        match (ctx.textInputAnchorRect()) {
+            case Some(anchor) =>
+                if (!sameAnchorRect(appliedInputAnchor, anchor)) {
+                    appliedInputAnchor = Some(anchor)
+                    try {
+                        window.setTextInputArea(anchor)
+                    } catch (_: Exception) {
+                        ()
+                    }
+                }
+            case None => ()
+        }
     }
 
     // Snapshot mode: `main.exe --snapshot <path.bmp>` renders a few frames so the UI
@@ -323,6 +353,13 @@ public class DesktopApp {
             resources[i].close()
             i -= 1
         }
+    }
+}
+
+private func sameAnchorRect(applied: ?Rect, next: Rect): Bool {
+    match (applied) {
+        case Some(rect) => rect.x == next.x && rect.y == next.y && rect.w == next.w && rect.h == next.h
+        case None => false
     }
 }
 

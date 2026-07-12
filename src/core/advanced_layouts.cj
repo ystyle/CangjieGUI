@@ -78,6 +78,10 @@ public class ZStack <: Widget {
         }
         false
     }
+
+    public func focusableIds(): Array<String> {
+        collectFocusableIds(children)
+    }
 }
 
 /**
@@ -175,6 +179,10 @@ public class Grid <: Widget {
         dispatchChildren(children, ctx, event)
     }
 
+    public func focusableIds(): Array<String> {
+        collectFocusableIds(children)
+    }
+
     private func gapH(ctx: UiContext): Float32 {
         max(0.0, ctx.resolve(horizontalGap))
     }
@@ -263,6 +271,10 @@ public class FlowRow <: Widget {
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
         dispatchChildren(children, ctx, event)
+    }
+
+    public func focusableIds(): Array<String> {
+        collectFocusableIds(children)
     }
 
     private func flowExtent(ctx: UiContext, available: Size, shouldLayout: Bool, frame: Rect): Size {
@@ -381,6 +393,10 @@ public class ScrollView <: Widget {
 
     public func isFlexible(): Bool {
         true
+    }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
     }
 }
 

@@ -50,3 +50,33 @@ func beginSceneDropsAnyLeakedClip(): Unit {
 
     @Expect(renderer.currentClip().isNone())
 }
+
+// The headless contract: every rendering entry point is a no-op and every query returns a
+// neutral value, so custom shells and canvas code run unchanged in windowless tests.
+@Test
+func headlessRendererNoOpsAndAnswersNeutrally(): Unit {
+    let renderer = Renderer.headless()
+
+    // Setters are no-ops rather than throwing on the missing device.
+    renderer.setScale(2.0)
+    renderer.setVSync(1)
+    renderer.setViewport(Rect(10.0, 10.0, 100.0, 80.0))
+    renderer.resetViewport()
+    renderer.setColorScale(1.5)
+    renderer.setColorFloat(0.2, 0.4, 0.6, 1.0)
+    renderer.captureBmp("never-written.bmp")
+
+    // Queries answer with neutral values.
+    @Expect(renderer.vsync(), Int32(0))
+    @Expect(renderer.viewport().w, Float32(0.0))
+    @Expect(renderer.colorScale(), Float32(1.0))
+
+    // Clip queries fall back to the logical clip stack, which works headlessly.
+    @Expect(!renderer.clipEnabled())
+    renderer.pushClip(Rect(4.0, 6.0, 40.0, 30.0))
+    @Expect(renderer.clipEnabled())
+    @Expect(renderer.clipRect().x, Float32(4.0))
+    @Expect(renderer.clipRect().h, Float32(30.0))
+    renderer.popClip()
+    @Expect(renderer.clipRect().w, Float32(0.0))
+}

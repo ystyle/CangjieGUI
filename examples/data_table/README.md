@@ -1,13 +1,15 @@
 # data_table：数据表格
 
 一张“服务器机群监控表”，集中演示 `Table` 控件：多列、固定表头、窗口化滚动、点击列头排序、
-行选择跟随数据，以及选中行驱动的详情栏——商用后台里最常见的数据网格场景。
+行选择跟随数据、自定义单元格（CPU 负载条），以及选中行驱动的详情栏——商用后台里最常见的
+数据网格场景。
 
 ## 你将学到
 
 - `Table(id, columns, rows, selected)` 的用法：`TableColumn(title, width, numeric)` 定义列，
   `Array<Array<String>>` 提供按列索引的单元格数据
 - **数值列**（`numeric: true`）右对齐并按数值排序，而非字典序（`88 < 100`，不是 `"100" < "88"`）
+- **自定义单元格**（`TableColumn.cell`）：CPU 列画负载条 + 数值，排序仍按字符串数值——显示与排序键解耦
 - 点击列头排序、再次点击反向；排序在**显示层**进行，选择以“原始行索引”存储，故排序后高亮仍跟随同一行
 - 键盘可达：`Tab` 聚焦表格后 `↑/↓/Home/End` 移动选择并把选中行滚入视区
 - 选中行详情由 `State.map` 派生，编辑选择即实时刷新
@@ -37,6 +39,20 @@ Table("fleet.table", serverColumns(), model.rows, model.selected).flex()
 ```cangjie
 TableColumn("主机名", 180.0)
 TableColumn("连接数", 120.0, numeric: true)
+```
+
+### 自定义单元格：显示与排序解耦
+
+“CPU %” 列用 `cell` 回调接管绘制——迷你负载条按百分比填充、负载越高颜色越警示，右侧保留数值。
+单元格字符串仍是 `"23"`，`numeric` 排序照常；表格先画好行底与选中高亮、把回调裁剪在单元格内，
+回调只画内容、不接收事件（行点击照常选中）：
+
+```cangjie
+TableColumn("CPU %", 100.0, numeric: true, cell: cpuCellPainter)
+
+func cpuCellPainter(ctx: UiContext, _: Int64, value: String, cell: Rect): Unit {
+    // 轨道 + 按 value 百分比填充的负载条 + 右对齐数值文本
+}
 ```
 
 ### 选择跟随数据行，而非屏幕位置

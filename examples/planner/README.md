@@ -9,7 +9,8 @@
 - `Keyed` 与 `rememberState` 的局部状态生命周期：切换页面卸载后按身份规则重置
 - `ProgressBar` 自带居中动画百分比：填充与数字由同一根弹簧驱动，永不失步
 - `maxLines` 让说明文字在窄侧栏内换行而不是溢出
-- 设置页的成组控件模式：`Stepper`、`Switch`、`RadioButton`、`Dropdown`（下拉选择）、`ComboBox`（可编辑下拉，键入过滤或自定义城市）
+- 设置页的成组控件模式：`Stepper`、`Switch`、`RadioButton`、`Dropdown`（下拉选择）、`ComboBox`
+  （可编辑下拉，键入过滤或自定义城市；24 个城市建议超出一屏，演示弹层内部滚动）
 
 ## 文件结构
 

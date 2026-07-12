@@ -103,7 +103,7 @@ internal func drawTextFieldSelection(ctx: UiContext, frame: Rect, text: String, 
 
 internal func drawTextFieldCursor(ctx: UiContext, frame: Rect, id: String, text: String, cursor: Int64,
     xShift!: Float32 = 0.0): Unit {
-    if (!ctx.hasFocus(id) || !textCursorVisible(ctx)) {
+    if (!ctx.hasFocus(id)) {
         return
     }
     let position = normalizedTextCursor(text, cursor)
@@ -112,7 +112,14 @@ internal func drawTextFieldCursor(ctx: UiContext, frame: Rect, id: String, text:
     // The caret spans exactly the glyph row: same height and vertical center as the
     // text the field draws, instead of the field's padding box.
     let lineHeight = ctx.renderer.textHeight(pointSize: FontSizes.BODY)
-    ctx.renderer.fill(Rect(x, frame.centerY() - lineHeight / 2.0, TEXT_CURSOR_W, lineHeight), ctx.theme.accent)
+    let caret = Rect(x, frame.centerY() - lineHeight / 2.0, TEXT_CURSOR_W, lineHeight)
+    // The IME anchors its candidate window at the caret whenever the field has focus;
+    // the blink phase only gates painting.
+    ctx.setTextInputAnchor(caret)
+    if (!textCursorVisible(ctx)) {
+        return
+    }
+    ctx.renderer.fill(caret, ctx.theme.accent)
 }
 
 /*
@@ -165,7 +172,7 @@ internal func drawTextAreaCursor(
     id: String,
     content: TextAreaContent
 ): Unit {
-    if (!ctx.hasFocus(id) || !textCursorVisible(ctx)) {
+    if (!ctx.hasFocus(id)) {
         return
     }
     let position = normalizedTextCursor(content.text, content.cursor)
@@ -174,10 +181,17 @@ internal func drawTextAreaCursor(
     let x = viewport.x + ctx.renderer.textWidth(content.text[lineStart..position], pointSize: FontSizes.BODY)
     let y = viewport.y + Float32(line) * CUI_SMALL_H - content.scroll
     if (y + CUI_SMALL_H < viewport.y || y > viewport.bottom()) {
-        return
+        return // the caret line is scrolled out of view; the last IME anchor stands
     }
     // Rows are drawn from the top of each CUI_SMALL_H cell, so the caret matches the
     // glyph row exactly rather than filling the whole cell.
     let lineHeight = ctx.renderer.textHeight(pointSize: FontSizes.BODY)
-    ctx.renderer.fill(Rect(x, y, TEXT_CURSOR_W, min(lineHeight, CUI_SMALL_H)), ctx.theme.accent)
+    let caret = Rect(x, y, TEXT_CURSOR_W, min(lineHeight, CUI_SMALL_H))
+    // The IME anchors its candidate window at the caret whenever the area has focus;
+    // the blink phase only gates painting.
+    ctx.setTextInputAnchor(caret)
+    if (!textCursorVisible(ctx)) {
+        return
+    }
+    ctx.renderer.fill(caret, ctx.theme.accent)
 }

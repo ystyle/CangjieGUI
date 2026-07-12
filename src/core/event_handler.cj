@@ -57,6 +57,10 @@ public class EventHandler <: Widget {
     public func focusableId(): ?String {
         child.focusableId()
     }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
+    }
 }
 
 public class FrameHandler <: Widget {
@@ -109,5 +113,9 @@ public class FrameHandler <: Widget {
 
     public func focusableId(): ?String {
         child.focusableId()
+    }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
     }
 }

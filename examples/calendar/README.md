@@ -9,7 +9,8 @@
 - 年/月是两个 `State`，箭头改写状态、整个网格随下一帧自动重建
 - `derive` 派生标题：只在年或月变化时才重新拼接字符串
 - 无 label 的成对 `IconButton` 依靠构建期唯一身份各自响应，不需要手写 `.id`
-- 用 `Surface` 逐像素生成 BMP 徽标并交给 `ImageView` 展示
+- 用 `Surface` 逐像素生成 BMP 徽标并交给 `ImageView` 展示：`ImageView` 逐帧内联声明即可，
+  解码纹理由按路径键控的共享缓存持有，无需提升实例或 `manage`
 
 ## 文件结构
 

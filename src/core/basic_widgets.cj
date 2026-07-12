@@ -443,7 +443,9 @@ public class Button <: Widget {
                         var style = base
                         if (ctx.isPressed(controlId)) {
                             style = style.withFill(ctx.theme.accentSoft)
-                        } else if (frame.contains(ctx.mouseX, ctx.mouseY)) {
+                        } else if (ctx.isHovered(controlId)) {
+                            // Single-winner hover: in overlapping layouts only the visually
+                            // top-most claimant highlights (same protocol as the cursor shape).
                             style = style.withFill(ctx.theme.fieldActive)
                         }
                         // The focus ring (drawn in draw() on keyboard focus) shows where

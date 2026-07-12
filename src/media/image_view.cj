@@ -1,6 +1,6 @@
 package cui.media
 
-import sdl.{Rect, Renderer, Size, Texture, TextureBlendMode, UiEvent}
+import sdl.{Rect, Size, Texture, UiEvent}
 import cui.core.{Length, LengthUnit, UiContext, Widget, emit}
 
 public enum ImageFit {
@@ -10,14 +10,13 @@ public enum ImageFit {
 }
 
 /*
- * Displays an image loaded from a file. The decoded texture is cached on the instance and freed
- * in `close()`, so — unlike springs/scroll offsets that persist by control identity — an ImageView
- * must be **hoisted out of the per-frame rebuild** and registered as a resource, or it reloads
- * from disk every frame and leaks the previous texture. Build it once and hand it to the app:
+ * Displays an image loaded from a file. Decoded textures live in the shared, path-keyed
+ * texture cache (see texture_cache.cj), so an ImageView is declared inline like any other
+ * widget — the per-frame rebuild costs one cache lookup, not a disk load. After overwriting
+ * an image file, call `invalidateImage(path)` to refresh it.
  *
- *   let badge = ImageView(path)   // created once, outside app.run
- *   app.manage(badge)            // freed on shutdown
- *   app.run { ... badge ... }    // referenced by the per-frame tree
+ * The class still implements `Resource` for source compatibility with the earlier
+ * hoist-and-`manage` pattern; `close()` only retires this view (the cache owns the texture).
  */
 public class ImageView <: Widget & Resource {
     private let path: String
@@ -25,8 +24,6 @@ public class ImageView <: Widget & Resource {
     private let preferredWidth: ?Length
     private let preferredHeight: Length
     private var frame = Rect.zero()
-    private var texture: ?Texture = None
-    private var loadFailed = false
     private var closed = false
 
     public init(
@@ -66,7 +63,7 @@ public class ImageView <: Widget & Resource {
         if (closed) {
             return
         }
-        match (textureFor(ctx.renderer)) {
+        match (sharedTexture(ctx.renderer, path)) {
             case Some(image) =>
                 let destination = fittedRect(Size(image.width, image.height), frame, imageFit)
                 match (imageFit) {
@@ -89,37 +86,7 @@ public class ImageView <: Widget & Resource {
     }
 
     public func close(): Unit {
-        if (closed) {
-            return
-        }
         closed = true
-        match (texture) {
-            case Some(image) => image.close()
-            case None => ()
-        }
-        texture = None
-    }
-
-    private func textureFor(renderer: Renderer): ?Texture {
-        match (texture) {
-            case Some(image) => Some(image)
-            case None =>
-                if (loadFailed) {
-                    return None
-                }
-                // A missing or corrupt file (or a headless renderer) must not throw out of
-                // draw and kill the frame loop; remember the failure so it is not retried —
-                // and does not hit the disk — every frame.
-                try {
-                    let loaded = renderer.loadTexture(path)
-                    loaded.setBlendMode(TextureBlendMode.Blend)
-                    texture = Some(loaded)
-                    Some(loaded)
-                } catch (_: Exception) {
-                    loadFailed = true
-                    None
-                }
-        }
     }
 }
 

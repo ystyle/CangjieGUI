@@ -12,6 +12,8 @@
 - `Modal` 承载表单子树：`TextField` 编辑草稿，打开即自动聚焦姓名字段（`autofocus` 依赖 Modal 的
   Frame 转发在对话框内生效），`Tab` 在表单控件间循环（焦点陷阱）；`.enabled(canSave())` 让“保存”
   按钮在姓名非空前禁用（表单校验）
+- 对话框内嵌套浮层：表单的“公司”字段是 `Modal` 里的 `ComboBox`——建议列表经浮层栈压在对话框
+  之上，键入过滤与点选填入照常，`Esc` 先关列表再关对话框
 - `ContextMenu` 与工具栏共享同一组“作用于选中行”的编辑/删除动作；删除走确认 `Modal`
 - 编辑不改原对象，而是编辑草稿、保存时整体替换该联系人——单一数据源、取消即丢弃
 
@@ -54,10 +56,22 @@ Button("保存", {=> model.saveForm()}, role: ButtonRole.Primary).enabled(model.
 this.queryObservation = this.query.observe({_, _ => selectionState.value = -1})
 ```
 
-### 模态承载真实控件
+### 模态承载真实控件，浮层可嵌套
 
 表单与删除确认都是 `Modal`——它托管的不是手绘内容，而是真实的 `TextField`/`Button` 子树，在暗化
 背景之上居中，事件被隔离在对话框内。右键菜单与工具栏则复用同一组作用于选中行的动作。
+
+表单的“公司”字段演示对话框内的嵌套浮层：
+
+```cangjie
+Modal(model.formOpen) {
+    // ...
+    ComboBox("contacts.form.company", model.draftCompany, companySuggestions()).flex()
+}
+```
+
+组合框的建议列表在对话框绘制期间登记到浮层栈顶，同帧画在面板之上、优先接收事件；选中或 `Esc`
+只关闭列表本身，对话框保持打开。页面级与对话框级的组合框行为完全一致，无需任何适配代码。
 
 ## 运行
 

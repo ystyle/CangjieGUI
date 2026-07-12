@@ -44,6 +44,19 @@ public interface Widget {
         None
     }
 
+    /*
+     * Every keyboard-focus id this widget's subtree registered during construction, in
+     * declaration order. The default covers leaf controls (their single `focusableId`);
+     * containers concatenate their children's and wrappers forward. `.enabled(false)`
+     * uses it to take a whole disabled subtree out of Tab traversal.
+     */
+    func focusableIds(): Array<String> {
+        match (focusableId()) {
+            case Some(id) => [id]
+            case None => []
+        }
+    }
+
     /** Constrains this widget to an exact width, e.g. `.width(160.vp)`. */
     func width(value: Length): Widget {
         applyModifier(this, WidgetModifier.Width(value))
@@ -181,15 +194,15 @@ public interface Widget {
 
     /*
      * Keeps this widget in layout and drawing while suppressing input events. A disabled
-     * control also leaves keyboard Tab traversal — a stop that ignores Enter/Space would
-     * be a dead end. Containers holding several focusables keep their subtree's stops;
-     * disable controls individually.
+     * subtree also leaves keyboard Tab traversal — a stop that ignores Enter/Space would
+     * be a dead end. Works at any granularity: on a single control or on a container
+     * (an HStack form row, a whole panel), whose focus stops are removed via
+     * `focusableIds()`.
      */
     func enabled(isEnabled: Bool): Widget {
         if (!isEnabled) {
-            match (focusableId()) {
-                case Some(id) => unregisterFocusable(id)
-                case None => ()
+            for (id in focusableIds()) {
+                unregisterFocusable(id)
             }
         }
         applyModifier(this, WidgetModifier.Enabled(isEnabled))

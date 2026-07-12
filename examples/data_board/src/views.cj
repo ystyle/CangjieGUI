@@ -9,8 +9,8 @@
  */
 package cui_data_board
 
-import cui.{Button, ButtonRole, Color, FlowRow, FontSizes, ForEach, Grid, HStack, Icon, IconName, Label, LengthUnits,
-    Panel, Picker, Spacer, State, Stepper, Switch, VStack}
+import cui.{Button, ButtonRole, Color, CrossAxisAlignment, FlowRow, FontSizes, ForEach, Grid, HStack, Icon, IconName,
+    Label, LengthUnits, Panel, Picker, ScrollView, Spacer, State, Stepper, Switch, VStack}
 
 func boardView(model: BoardModel): Unit {
     VStack {
@@ -36,6 +36,7 @@ func doingAccent(model: BoardModel): Color {
 
 func boardHeader(model: BoardModel): Unit {
     Panel {
+        // 居中对齐让定高控件保持自然高度（38vp），而不是被两行标题撑高的行拉伸变形。
         HStack {
             Icon(IconName.Process).foregroundColor(Color.rgb(54, 116, 210)).iconSize(22.vp)
             VStack {
@@ -48,7 +49,7 @@ func boardHeader(model: BoardModel): Unit {
             Label("在制上限").muted().fontSize(FontSizes.CAPTION)
             Stepper("board.wip", model.wipLimit).range(2, 8)
             Button("新增任务", {=> model.addTask(model.planned)}).role(ButtonRole.Primary)
-        }
+        }.crossAxisAlignment(CrossAxisAlignment.Center)
     }.contentPadding(12.vp).flexible(false)
 }
 
@@ -67,10 +68,15 @@ func boardColumn(
                 Spacer()
                 Label(count).foregroundColor(accent).fontSize(FontSizes.CAPTION)
             }.flexible(false)
-            ForEach(visible, key: {task => "task.${task.id}"}) {
-                task => taskCard(task, model.compact.value)
-            }
-            Spacer()
+            // 卡片区在列内滚动：窗口调矮时卡片不会溢出面板，多出的卡片滚动可达，
+            // “添加”按钮始终钉在列底。
+            ScrollView("board.cards.${title}") {
+                VStack {
+                    ForEach(visible, key: {task => "task.${task.id}"}) {
+                        task => taskCard(task, model.compact.value)
+                    }
+                }.spacing(10.vp).flexible(false)
+            }.flex()
             Button("添加到${title}", {=> model.addTask(column)}).fillWidth()
         }.spacing(10.vp)
     }.contentPadding(12.vp).style(columnSurface())

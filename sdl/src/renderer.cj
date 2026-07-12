@@ -197,36 +197,54 @@ public class Renderer {
 
     /**
      * Throws `CuiException` when the scale is invalid or SDL rejects the renderer scale.
+     * Headless: the logical scale is still recorded, so text metrics stay consistent.
      */
     public func setScale(scale: Float32): Unit {
         if (scale <= 0.0) {
             throw CuiException("Renderer scale must be greater than 0.")
         }
-        ensureSdl(unsafe { SDL_SetRenderScale(ptr, scale, scale) }, "SDL_SetRenderScale")
+        if (!ptr.isNull()) {
+            ensureSdl(unsafe { SDL_SetRenderScale(ptr, scale, scale) }, "SDL_SetRenderScale")
+        }
         scaleX = scale
         scaleY = scale
     }
 
     public func setVSync(vsync: Int32): Unit {
+        if (ptr.isNull()) {
+            return
+        }
         ensureSdl(unsafe { SDL_SetRenderVSync(ptr, vsync) }, "SDL_SetRenderVSync")
     }
 
     public func vsync(): Int32 {
+        if (ptr.isNull()) {
+            return 0
+        }
         var value: Int32 = 0
         ensureSdl(unsafe { SDL_GetRenderVSync(ptr, inout value) }, "SDL_GetRenderVSync")
         value
     }
 
     public func setViewport(rect: Rect): Unit {
+        if (ptr.isNull()) {
+            return
+        }
         var raw = rect.toSdlRect()
         ensureSdl(unsafe { SDL_SetRenderViewport(ptr, inout raw) }, "SDL_SetRenderViewport")
     }
 
     public func resetViewport(): Unit {
+        if (ptr.isNull()) {
+            return
+        }
         ensureSdl(unsafe { SDL_SetRenderViewport(ptr, CPointer<SdlRect>()) }, "SDL_SetRenderViewport")
     }
 
     public func viewport(): Rect {
+        if (ptr.isNull()) {
+            return Rect(0.0, 0.0, 0.0, 0.0)
+        }
         var raw = SdlRect()
         ensureSdl(unsafe { SDL_GetRenderViewport(ptr, inout raw) }, "SDL_GetRenderViewport")
         rectFromSdl(raw)
@@ -281,27 +299,46 @@ public class Renderer {
         ensureSdl(unsafe { SDL_SetRenderClipRect(ptr, CPointer<SdlRect>()) }, "SDL_SetRenderClipRect")
     }
 
+    // Headless, the logical clip stack still answers: the top entry (or a zero rect).
     public func clipRect(): Rect {
+        if (ptr.isNull()) {
+            return match (currentClip()) {
+                case Some(rect) => rect
+                case None => Rect(0.0, 0.0, 0.0, 0.0)
+            }
+        }
         var raw = SdlRect()
         ensureSdl(unsafe { SDL_GetRenderClipRect(ptr, inout raw) }, "SDL_GetRenderClipRect")
         rectFromSdl(raw)
     }
 
     public func clipEnabled(): Bool {
+        if (ptr.isNull()) {
+            return !clipStack.isEmpty()
+        }
         unsafe { SDL_RenderClipEnabled(ptr) }
     }
 
     public func setColorScale(scale: Float32): Unit {
+        if (ptr.isNull()) {
+            return
+        }
         ensureSdl(unsafe { SDL_SetRenderColorScale(ptr, scale) }, "SDL_SetRenderColorScale")
     }
 
     public func colorScale(): Float32 {
+        if (ptr.isNull()) {
+            return 1.0
+        }
         var value: Float32 = 1.0
         ensureSdl(unsafe { SDL_GetRenderColorScale(ptr, inout value) }, "SDL_GetRenderColorScale")
         value
     }
 
     public func setColorFloat(r: Float32, g: Float32, b: Float32, a: Float32): Unit {
+        if (ptr.isNull()) {
+            return
+        }
         ensureSdl(unsafe {
             SDL_SetRenderDrawColorFloat(ptr, clamp01(r), clamp01(g), clamp01(b), clamp01(a))
         }, "SDL_SetRenderDrawColorFloat")
@@ -481,11 +518,15 @@ public class Renderer {
 
     /**
      * Reads back the current render target and writes it to a BMP file. Useful for
-     * automated visual snapshots and documentation thumbnails.
+     * automated visual snapshots and documentation thumbnails. Headless it is a no-op —
+     * there are no pixels to read.
      *
      * Throws `CuiException` when SDL cannot read the pixels or save the file.
      */
     public func captureBmp(path: String): Unit {
+        if (ptr.isNull()) {
+            return
+        }
         let surface = unsafe { SDL_RenderReadPixels(ptr, CPointer<SdlRect>()) }
         if (surface.isNull()) {
             throw CuiException("SDL_RenderReadPixels failed: ${lastSdlError()}")

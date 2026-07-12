@@ -1016,3 +1016,166 @@ func contextMenuDismissesAndKeyboardRunsHighlight(): Unit {
     @Expect(ran.value, Int64(3))
     @Expect(!ctx.hasOverlay())
 }
+
+// Overlays stack: events walk the layers top-most first with unconsumed events falling
+// through; drawing walks bottom-up; removing by owner leaves the other layers open.
+@Test
+func overlayStackDispatchesTopDownAndRemovesByOwner(): Unit {
+    let ctx = testContext()
+    let trace = State<String>("")
+    ctx.setOverlay(Overlay(
+        handleEvent: {
+            _, _ =>
+            trace.value = trace.value + "(base:consume)"
+            true
+        },
+        render: {_ => trace.value = trace.value + "(base:draw)"},
+        owner: "base"
+    ))
+    ctx.setOverlay(Overlay(
+        handleEvent: {
+            _, _ =>
+            trace.value = trace.value + "(top:decline)"
+            false
+        },
+        render: {_ => trace.value = trace.value + "(top:draw)"},
+        owner: "top"
+    ))
+    @Expect(ctx.overlayCount(), Int64(2))
+
+    // The top-most layer sees the event first; declining lets it fall to the one beneath.
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Enter, false)))
+    @Expect(trace.value, "(top:decline)(base:consume)")
+
+    // Drawing goes bottom-up, so the top-most layer paints last (on top).
+    trace.value = ""
+    ctx.drawActiveOverlay()
+    @Expect(trace.value, "(base:draw)(top:draw)")
+
+    // Removal by owner takes out exactly that layer; the rest stay open.
+    ctx.removeOverlay("top")
+    @Expect(ctx.overlayCount(), Int64(1))
+    trace.value = ""
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Enter, false)))
+    @Expect(trace.value, "(base:consume)")
+
+    ctx.clearActiveOverlay()
+    @Expect(!ctx.hasOverlay())
+}
+
+// Re-registering under an owner already on the stack replaces that entry in place, so a
+// control that draws twice within one frame never stacks duplicate popups.
+@Test
+func overlayReregistrationReplacesInPlace(): Unit {
+    let ctx = testContext()
+    let painted = State<String>("")
+    ctx.setOverlay(Overlay(handleEvent: {_, _ => true},
+        render: {_ => painted.value = painted.value + "stale"}, owner: "menu"))
+    ctx.setOverlay(Overlay(handleEvent: {_, _ => true},
+        render: {_ => painted.value = painted.value + "fresh"}, owner: "menu"))
+    @Expect(ctx.overlayCount(), Int64(1))
+    ctx.drawActiveOverlay()
+    @Expect(painted.value, "fresh")
+}
+
+// Rendering a layer may register further overlays — a popup opened inside a dialog
+// registers while the dialog's body draws — and the draw pass picks them up within the
+// same frame, painting them above the layer that spawned them.
+@Test
+func overlayRegisteredDuringRenderPaintsSameFrame(): Unit {
+    let ctx = testContext()
+    let trace = State<String>("")
+    ctx.setOverlay(Overlay(
+        handleEvent: {_, _ => true},
+        render: {
+            c =>
+            trace.value = trace.value + "(dialog)"
+            c.setOverlay(Overlay(handleEvent: {_, _ => true},
+                render: {_ => trace.value = trace.value + "(popup)"}, owner: "popup"))
+        },
+        owner: "dialog"
+    ))
+    ctx.drawActiveOverlay()
+    @Expect(trace.value, "(dialog)(popup)")
+    @Expect(ctx.overlayCount(), Int64(2))
+}
+
+// The nesting the overlay stack exists for: a popup opened from inside a modal dialog. The
+// menu registers above the dialog, sees events first, and running an item closes only the
+// menu — the dialog keeps its own registration and dismisses on a later Escape.
+@Test
+func contextMenuInsideModalStacksAboveDialog(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 400.0
+    ctx.viewportHeight = 300.0
+    let presented = State<Bool>(true)
+    let ran = State<Bool>(false)
+    let modal = Modal(presented) {
+        ContextMenu(items: [MenuItem("刷新", {=> ran.value = true})]) {
+            emit(SizedLayoutProbe(Size(200.0, 100.0)))
+        }
+    }
+    modal.layout(ctx, Rect.zero())
+    modal.draw(ctx)
+    @Expect(ctx.overlayCount(), Int64(1))
+
+    // Content 200x100 plus 22px padding centres the dialog at (78,78,244,144); the body sits
+    // at (100,100,200,100). A right press inside is routed through the dialog and opens the
+    // menu at the pointer; drawing the stack then registers the menu above the dialog.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Right, 150.0, 120.0)))
+    ctx.drawActiveOverlay()
+    @Expect(ctx.overlayCount(), Int64(2))
+
+    // The menu opens at (150,120); its single row spans y 125..153. Choosing it runs the
+    // action and closes the menu only — the dialog beneath stays open.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 160.0, 130.0)))
+    @Expect(ran.value)
+    @Expect(ctx.overlayCount(), Int64(1))
+    @Expect(presented.value)
+
+    // With the menu gone, Escape reaches the dialog and dismisses it.
+    @Expect(ctx.dispatchOverlay(UiEvent.KeyDown(Key.Escape, false)))
+    @Expect(!presented.value)
+    @Expect(!ctx.hasOverlay())
+}
+
+// A press in the menu's padding strip (above the first row) runs nothing and just closes —
+// previously the negative row fraction truncated to 0 and ran the first item.
+@Test
+func contextMenuPaddingPressRunsNothing(): Unit {
+    let ctx = testContext()
+    ctx.viewportWidth = 300.0
+    ctx.viewportHeight = 400.0
+    let ran = State<Int64>(0)
+    let menu = ContextMenu(items: [MenuItem("甲", {=> ran.value = 1}), MenuItem("乙", {=> ran.value = 2})]) {
+        emit(SizedLayoutProbe(Size(120.0, 60.0)))
+    }
+    menu.layout(ctx, Rect(20.0, 20.0, 120.0, 60.0))
+    let _ = menu.handle(ctx, UiEvent.MouseDown(MouseButton.Right, 40.0, 40.0))
+    menu.draw(ctx)
+
+    // The menu opens at (40,40); its top padding spans y 40..45.
+    @Expect(ctx.dispatchOverlay(UiEvent.MouseDown(MouseButton.Left, 60.0, 42.0)))
+    @Expect(ran.value, Int64(0))
+    @Expect(!ctx.hasOverlay())
+}
+
+// `.enabled(false)` on a container removes every focus stop in its subtree — a disabled
+// form row cannot be Tab-reached — while sibling stops stay in the ring.
+@Test
+func disabledContainerRemovesSubtreeFocusStops(): Unit {
+    let store = StateStore()
+    let _ = buildRoot({
+        =>
+        Button("先", {=> ()}).id("head")
+        HStack {
+            Button("甲", {=> ()}).id("row.a")
+            Button("乙", {=> ()}).id("row.b")
+        }.enabled(false)
+        Button("后", {=> ()}).id("tail")
+    }, store)
+    let ring = store.focusRing()
+    @Expect(ring.size, 2)
+    @Expect(ring[0], "head")
+    @Expect(ring[1], "tail")
+}

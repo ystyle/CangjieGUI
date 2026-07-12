@@ -1,8 +1,10 @@
 package cui.controls
 
-import sdl.{MouseButton, Rect, Size, UiEvent, clampF32}
+import std.collection.ArrayList
+import sdl.{Key, MouseButton, Rect, Size, UiEvent, clampF32}
 import cui.core.{Bindable, CUI_CONTROL_H, CUI_GAP, CursorShape, Spring, UiContext, Widget, buildChildren,
-    claimHoverIfInside, controlIdentity, drawSurface, emit, localState}
+    claimHoverIfInside, drawFocusRing, drawSurface, emit, focusableControlIdentity, localState,
+    unregisterFocusable}
 
 public class SegmentedControl <: Widget {
     private let items: Array<String>
@@ -16,7 +18,8 @@ public class SegmentedControl <: Widget {
     public init(items: Array<String>, selected: Bindable<Int64>) {
         this.items = items
         this.selected = selected
-        let cid = controlIdentity("SegmentedControl")
+        // A focus stop: Tab reaches the control, Left/Right switch the selected segment.
+        let cid = focusableControlIdentity("SegmentedControl")
         this.controlId = cid
         let start = Float32(clampIndex(selected.value, items.size))
         this.indicatorSpring = localState<Spring>("${cid}:indicator") {Spring(start)}.value
@@ -39,6 +42,9 @@ public class SegmentedControl <: Widget {
         drawSurface(ctx, frame, ctx.theme.fieldSurface(false))
         let target = Float32(clampIndex(selected.value, items.size))
         drawSlidingSegments(ctx, frame, items, indicatorSpring.animate(target: target, deltaMs: ctx.frame.deltaMs))
+        if (ctx.showFocusRing(controlId)) {
+            drawFocusRing(ctx, frame, ctx.theme.controlRadius)
+        }
     }
 
     public func handle(ctx: UiContext, event: UiEvent): Bool {
@@ -46,13 +52,28 @@ public class SegmentedControl <: Widget {
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 if (frame.contains(x, y) && items.size > 0) {
+                    ctx.focus(controlId)
                     let segmentW = frame.w / Float32(items.size)
                     selected.value = clampIndex(Int64((x - frame.x) / segmentW), items.size)
                     return true
                 }
+            case UiEvent.KeyDown(Key.Left, _) => return stepSelection(ctx, -1)
+            case UiEvent.KeyDown(Key.Right, _) => return stepSelection(ctx, 1)
             case _ => ()
         }
         false
+    }
+
+    public func focusableId(): ?String {
+        Some(controlId)
+    }
+
+    private func stepSelection(ctx: UiContext, delta: Int64): Bool {
+        if (!ctx.hasFocus(controlId) || items.size == 0) {
+            return false
+        }
+        selected.value = clampIndex(clampIndex(selected.value, items.size) + delta, items.size)
+        true
     }
 }
 
@@ -68,9 +89,25 @@ public class TabView <: Widget {
     public init(labels: Array<String>, selected: Bindable<Int64>, body!: () -> Unit) {
         this.labels = labels
         this.selected = selected
-        this.pages = buildChildren(body)
-        let cid = controlIdentity("TabView")
+        // A focus stop: Tab reaches the strip, Left/Right switch the selected tab. Registered
+        // before the pages build, so Tab lands on the strip before the controls inside a page —
+        // matching the visual order (strip above content).
+        let cid = focusableControlIdentity("TabView")
         this.controlId = cid
+        this.pages = buildChildren(body)
+        // Only the active page can receive events, so stops on hidden pages would be dead
+        // ends for Tab: building registers every page's controls, then the inactive pages'
+        // stops are taken out again. Switching tabs re-registers on the next frame's rebuild.
+        let active = clampIndex(selected.value, this.pages.size)
+        var i = 0
+        while (i < this.pages.size) {
+            if (i != active) {
+                for (id in this.pages[i].focusableIds()) {
+                    unregisterFocusable(id)
+                }
+            }
+            i += 1
+        }
         // The active-tab indicator slides between tabs; started at the current tab so a static
         // first frame is settled (snapshot-stable).
         let start = Float32(clampIndex(selected.value, labels.size))
@@ -99,7 +136,7 @@ public class TabView <: Widget {
         // Only the tab strip is a click target; pages claim their own hover shapes.
         claimHoverIfInside(ctx, event, Rect(frame.x, frame.y, frame.w, CUI_CONTROL_H), controlId,
             CursorShape.Interactive)
-        if (handleTabs(event)) {
+        if (handleTabs(ctx, event)) {
             ensureActivePageLayout(ctx)
             return true
         }
@@ -112,6 +149,23 @@ public class TabView <: Widget {
 
     public func isFlexible(): Bool {
         true
+    }
+
+    public func focusableId(): ?String {
+        Some(controlId)
+    }
+
+    public func focusableIds(): Array<String> {
+        // The strip plus every page's stops, so disabling a whole TabView removes them all
+        // (including hidden pages', which a later frame's rebuild would otherwise re-register).
+        let ids = ArrayList<String>()
+        ids.add(controlId)
+        for (page in pages) {
+            for (id in page.focusableIds()) {
+                ids.add(id)
+            }
+        }
+        ids.toArray()
     }
 
     private func pageIndex(): Int64 {
@@ -153,20 +207,34 @@ public class TabView <: Widget {
         drawSurface(ctx, header, ctx.theme.fieldSurface(false))
         let target = Float32(clampIndex(selected.value, labels.size))
         drawSlidingSegments(ctx, header, labels, indicatorSpring.animate(target: target, deltaMs: ctx.frame.deltaMs))
+        if (ctx.showFocusRing(controlId)) {
+            drawFocusRing(ctx, header, ctx.theme.controlRadius)
+        }
     }
 
-    private func handleTabs(event: UiEvent): Bool {
+    private func handleTabs(ctx: UiContext, event: UiEvent): Bool {
         match (event) {
             case UiEvent.MouseDown(MouseButton.Left, x, y) =>
                 let header = Rect(frame.x, frame.y, frame.w, CUI_CONTROL_H)
                 if (header.contains(x, y) && labels.size > 0) {
+                    ctx.focus(controlId)
                     let tabW = frame.w / Float32(labels.size)
                     selected.value = clampIndex(Int64((x - frame.x) / tabW), labels.size)
                     return true
                 }
+            case UiEvent.KeyDown(Key.Left, _) => return stepTab(ctx, -1)
+            case UiEvent.KeyDown(Key.Right, _) => return stepTab(ctx, 1)
             case _ => ()
         }
         false
+    }
+
+    private func stepTab(ctx: UiContext, delta: Int64): Bool {
+        if (!ctx.hasFocus(controlId) || labels.size == 0) {
+            return false
+        }
+        selected.value = clampIndex(clampIndex(selected.value, labels.size) + delta, labels.size)
+        true
     }
 }
 

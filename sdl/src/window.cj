@@ -105,8 +105,13 @@ public class SdlWindow <: Resource {
         Size(Float32(width), Float32(height))
     }
 
+    /**
+     * Tells the OS where the text caret is, in the window's logical pixels (the same space
+     * as events and drawing), so IME composition UI — the candidate window — appears at the
+     * caret instead of a screen corner. The conversion to window pixels happens here.
+     */
     public func setTextInputArea(rect: Rect): Unit {
-        var raw = rect.toSdlRect()
+        var raw = Rect(rect.x * scale, rect.y * scale, rect.w * scale, rect.h * scale).toSdlRect()
         ensureSdl(unsafe { SDL_SetTextInputArea(windowPtr, inout raw, 0) }, "SDL_SetTextInputArea")
     }
 

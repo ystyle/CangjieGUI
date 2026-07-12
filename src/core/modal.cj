@@ -11,7 +11,9 @@ private let MODAL_MAX_W: Float32 = 460.0
  * via the interactive overlay — but unlike a dropdown or context menu (which draw their body by
  * hand), a Modal hosts a real widget subtree: its `body` widgets are laid out inside the panel
  * and receive events routed through the overlay, so a dialog can hold buttons, text fields, or
- * anything else with normal state.
+ * anything else with normal state — including controls that open popups of their own (Dropdown,
+ * ComboBox, ContextMenu), which register above the dialog on the overlay stack, paint on top,
+ * and see events first.
  *
  * Being modal, it swallows every event (nothing reaches the backdrop tree); a press outside the
  * panel or Escape dismisses it. The body is built only while presented, so a hidden dialog costs
@@ -26,11 +28,15 @@ public class Modal <: Widget {
     // stay in the global ring but cannot receive events while the dialog is open).
     private let contentFocusables: Array<String>
     private let onDismiss: ?() -> Unit
+    // Identifies this dialog's overlay registration across per-frame rebuilds, so dismissing
+    // removes exactly this dialog from the overlay stack (never a popup opened above it).
+    private let overlayOwner: String
     private var dialogRect = Rect.zero()
 
     public init(presented: Bindable<Bool>, onDismiss!: ?() -> Unit = None, body!: () -> Unit) {
         this.presented = presented
         this.onDismiss = onDismiss
+        this.overlayOwner = controlIdentity("Modal")
         if (presented.value) {
             let focusStart = focusableCountNow()
             this.content = Some(buildChild(body))
@@ -69,7 +75,8 @@ public class Modal <: Widget {
         if (presented.value) {
             match (content) {
                 case Some(_) =>
-                    ctx.setOverlay(Overlay(handleEvent: {c, e => handleModal(c, e)}, render: {c => drawModal(c)}))
+                    ctx.setOverlay(Overlay(handleEvent: {c, e => handleModal(c, e)}, render: {c => drawModal(c)},
+                        owner: overlayOwner))
                 case None => ()
             }
         }
@@ -85,6 +92,10 @@ public class Modal <: Widget {
             case _ => ()
         }
         false
+    }
+
+    public func focusableIds(): Array<String> {
+        contentFocusables // the stops the dialog's own focus trap cycles (empty while hidden)
     }
 
     private func handleModal(ctx: UiContext, event: UiEvent): Bool {
@@ -152,7 +163,7 @@ public class Modal <: Widget {
 
     private func dismiss(ctx: UiContext): Unit {
         presented.value = false
-        ctx.clearActiveOverlay()
+        ctx.removeOverlay(overlayOwner)
         match (onDismiss) {
             case Some(callback) => callback()
             case None => ()

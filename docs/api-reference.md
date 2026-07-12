@@ -157,16 +157,20 @@
 | `ScrollView` | `id`、`body` | 垂直滚动；`scrollState` 接管偏移；溢出时为滚动条预留轨道，不遮挡内容；滑块可拖动、轨道可翻页 |
 | `Panel` | `body`（可选 `padding: LengthInsets`） | `contentPadding`、`style`、`flexible` |
 | `Tooltip` | `text`、`body` | 悬停约 500ms 后在树上层绘制提示气泡；透明包裹，不改变布局/事件 |
-| `Dropdown` | `id`、`items`、`selected` | 下拉选择：点击/Enter 打开，弹出列表浮于树上；选中/外点/Esc 关闭，上下键移动高亮。面向中短列表：弹层高度按视口截断，暂无内部滚动 |
+| `Dropdown` | `id`、`items`、`selected` | 下拉选择：点击/Enter 打开，弹出列表浮于树上（下方放不下翻到上方）；选中/外点/Esc 关闭，上下键移动高亮。长列表在弹层内部滚动：滚轮、可拖动滑块、方向键揭示高亮，打开时选中行滚入视野 |
 | `ContextMenu` | `items`、`body` | 为子控件附加右键菜单：指针处弹出，选中运行动作并关闭、外点/Esc 取消、方向键与悬停移动高亮；透明包裹，仅拦截子区域内右键 |
-| `Modal` | `presented`、`body`（可选 `onDismiss`） | 模态对话框：`presented` 为真时暗化背景+居中面板，承载真实控件子树；拦截全部输入，`Tab` 在对话框内循环（焦点陷阱），每帧 Frame 转发进子树（`autofocus` 可用）；外点/Esc 关闭；零尺寸、仅呈现时构建 `body`，置于根部 `ZStack` |
+| `Modal` | `presented`、`body`（可选 `onDismiss`） | 模态对话框：`presented` 为真时暗化背景+居中面板，承载真实控件子树；拦截全部输入，`Tab` 在对话框内循环（焦点陷阱），每帧 Frame 转发进子树（`autofocus` 可用）；外点/Esc 关闭；对话框内可再开 `Dropdown`/`ComboBox`/`ContextMenu`（弹层经浮层栈压在面板之上，逐层关闭）；零尺寸、仅呈现时构建 `body`，置于根部 `ZStack` |
 | `Flexible` | `body` | 兼容的权重包装容器，新代码可用 `.flex` |
 | `Spacer` | 无 | 弹性空白 |
 
-`ContextMenu` 的条目为 `MenuItem(label: String, action: () -> Unit)`。`Dropdown` 弹出列表与
-`ContextMenu` 菜单都由**交互式浮层**承载：控件在 `draw` 中经 `UiContext.setOverlay(Overlay(...))`
-注册一个浮层，外壳在派发树事件前先调用 `UiContext.dispatchOverlay`、在树绘制后调用
-`drawActiveOverlay`，故浮层内容始终在最上层且优先接收事件。自定义控件可复用这套机制实现弹出层。
+`ContextMenu` 的条目为 `MenuItem(label: String, action: () -> Unit)`。`Dropdown` 弹出列表、
+`ContextMenu` 菜单与 `Modal` 对话框都由**浮层栈**承载：控件在 `draw` 中经
+`UiContext.setOverlay(Overlay(handleEvent:, render:, owner:))` 登记一层浮层（登记顺序即 z 序，
+同 `owner` 重复登记原位替换），关闭时以 `removeOverlay(owner)` 精确撤下自己那一层；外壳在派发树
+事件前先调用 `UiContext.dispatchOverlay`（自栈顶向下，某层消费即止）、在树绘制后调用
+`drawActiveOverlay`（自栈底向上，绘制期间新登记的浮层同帧画在其上）、每帧开始以
+`clearActiveOverlay` 清栈，`overlayCount()` 返回当前打开的浮层数。浮层因此可嵌套——对话框内的
+下拉列表压在对话框之上。自定义控件可复用这套机制实现弹出层。
 
 ## 7. 基础控件
 
@@ -191,10 +195,10 @@ Enter/Space，悬停与按压有主题化的视觉反馈。
 | `Checkbox` | `Checkbox(label, Bindable<Bool>)` | `id`；鼠标释放或 Enter/Space 切换 |
 | `Switch` | `Switch(label, Bindable<Bool>)` | `id`；二态开关 |
 | `RadioButton` | `RadioButton(label, selected, value)` | `id`；多个实例共享同一 `Bindable<Int64>` |
-| `Picker` | `Picker(id, items, selected)` | 点击前后区域或 Left/Right 循环选择 |
-| `Stepper` | `Stepper(id, Bindable<Int64>)` | `range(lower, upper)`、`step(value)` |
-| `SegmentedControl` | `SegmentedControl(items, selected)` | 分段单选；选中指示器弹簧滑动到新段 |
-| `TabView` | `TabView(labels, selected) { pages }` | 页面按标签顺序声明；活动标签指示器弹簧滑动 |
+| `Picker` | `Picker(id, items, selected)` | 点击前后区域或 Left/Right 循环选择；宽度按最长选项自适应（切换选项不抖动） |
+| `Stepper` | `Stepper(id, Bindable<Int64>)` | `range(lower, upper)`、`step(value)`；宽度按数值内容自适应（一至两位数稳定） |
+| `SegmentedControl` | `SegmentedControl(items, selected)` | 分段单选；选中指示器弹簧滑动到新段；`Tab` 聚焦后 Left/Right 切换（端点钳制） |
+| `TabView` | `TabView(labels, selected) { pages }` | 页面按标签顺序声明；活动标签指示器弹簧滑动；页签条为焦点停靠点（先于页内控件），聚焦后 Left/Right 切换页签 |
 | `ListView` | `ListView(items, selected)` | `scrollState`；点击选择、滚轮滚动，`Tab` 聚焦 + 方向键导航；选择变化即滚入可视区（含应用层改选），无外部滚动态时偏移按身份保留；滑块可拖动 |
 | `Table` | `Table(id, columns, rows, selected)` | 多列数据表：固定表头、窗口化滚动；点击列头排序（再次反向、数值列按数值），行选择存原始行索引故排序后跟随，`Tab` + 方向键/Home/End 导航；悬停保持默认箭头光标 |
 | `ProgressBar` | `ProgressBar(Observable<Float32>)` | `range(lower, upper)` |
@@ -203,9 +207,13 @@ Enter/Space，悬停与按压有主题化的视觉反馈。
 `Stepper.step` 的值必须大于 0，否则抛 `IllegalArgumentException`。数值控件会安全处理反向范围和
 越界输入。
 
-`Table` 的列为 `TableColumn(title, width, numeric!: Bool = false)`，行为 `Array<Array<String>>`（按列
-索引的单元格）。`numeric` 列右对齐并按数值排序（`88 < 100`），文本列左对齐按 UTF-8 字节序。排序为每帧
-稳定归并排序，始终反映最新单元格值；超大数据集应在模型侧预排序、以无激活排序列的方式传入。
+`Table` 的列为 `TableColumn(title, width, numeric!: Bool = false, cell!: ?(UiContext, Int64, String,
+Rect) -> Unit = None)`，行为 `Array<Array<String>>`（按列索引的单元格）。`numeric` 列右对齐并按数值
+排序（`88 < 100`），文本列左对齐按 UTF-8 字节序。排序为每帧稳定归并排序，始终反映最新单元格值；
+超大数据集应在模型侧预排序、以无激活排序列的方式传入。`cell` 为可选的**自定义单元格绘制回调**
+（进度条、色块、徽标）：参数依次为上下文、原始行索引、单元格字符串值与单元格矩形；表格先绘制行底
+与选中高亮并把回调裁剪在单元格内，回调只负责内容。排序仍按字符串值与 `numeric` 规则进行——显示与
+排序键解耦（“87%” 可画成负载条、仍按 87 排序）。回调仅绘制，不接收事件；行点击照常选中。
 
 ## 9. 文本
 
@@ -213,7 +221,7 @@ Enter/Space，悬停与按压有主题化的视觉反馈。
 |---|---|---|
 | `TextField` | `TextField(id, text, cursor!: ?State<Int64> = None, anchor!: ?State<Int64> = None)` | `autofocus`；单行 UTF-8 编辑；Shift 扩选、拖选、Ctrl+A/C/X/V；`undo`/`redo`（Ctrl+Z/Y） |
 | `TextArea` | `TextArea(id, text, scroll!: ?State<Float32> = None, cursor!: ?State<Int64> = None, anchor!: ?State<Int64> = None, editable!: Bool = true)` | 多行选区、Shift+↑↓ 跨行扩选、拖选、Ctrl+A/C/X/V；`undo`/`redo`（Ctrl+Z/Y）；只读区（`editable: false`）不参与 Tab 遍历 |
-| `ComboBox` | `ComboBox(id, text: Bindable<String>, options)` | 可编辑下拉：内嵌 `TextField`（完整编辑）+ 建议列表浮层；键入过滤（无匹配显示“—”占位）、点击/回车填入，自由文本亦保留。面向中短建议列表：弹层高度按视口截断，暂无内部滚动 |
+| `ComboBox` | `ComboBox(id, text: Bindable<String>, options)` | 可编辑下拉：内嵌 `TextField`（完整编辑）+ 建议列表浮层；键入过滤（无匹配显示“—”占位）、点击/回车填入，自由文本亦保留。长建议列表在弹层内部滚动：滚轮、可拖动滑块、方向键揭示高亮 |
 
 外部状态（滚动、光标、锚点）均为可选命名参数；持有 `cursor!` 就应连同 `anchor!` 一并持有并
 **成对改写**——只改光标会残留“幻影选区”，下一次键入会替换它覆盖的内容。
@@ -239,8 +247,11 @@ Enter/Space，悬停与按压有主题化的视觉反馈。
 ## 10. 媒体与事件包装器
 
 - `CanvasWidget(onDraw).onEvent(handler)`：自定义绘制和事件区域。
-- `ImageView(path).fit(ImageFit)`：`Stretch`、`Contain`、`Cover`；实现 `Resource`；
-  `preferredWidth`/`preferredHeight` 为 `Length`。
+- `ImageView(path).fit(ImageFit)`：`Stretch`、`Contain`、`Cover`；`preferredWidth`/`preferredHeight`
+  为 `Length`。解码纹理由**按路径键控的共享缓存**持有（负缓存记住失败的加载），因此可像其他控件
+  一样逐帧内联声明；`invalidateImage(path)` 使单个路径失效并在下帧重载（覆盖图片文件后调用），
+  `clearImageCache()` 清空全部。仍实现 `Resource` 以兼容旧的提升 + `manage` 写法（`close` 仅
+  停用该视图，纹理归缓存所有）。
 - `EventHandler(onEvent) { ... }`：在子树前截获事件。
 - `FrameHandler(onFrame) { ... }`：接收每帧 `FrameInfo`。
 

@@ -171,12 +171,19 @@ func preferencesPage(model: PlannerModel): Unit {
                 HStack {
                     Label("默认工作城市")
                     Spacer()
-                    ComboBox("planner.city", model.location,
-                        ["北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "西安"]).width(180.vp)
+                    // 长建议列表：超出周围空间时在弹层内部滚动（滚轮/拖动滑块/方向键揭示），
+                    // 键入即过滤到匹配城市。
+                    ComboBox("planner.city", model.location, majorCities()).width(180.vp)
                 }.flexible(false)
             }
         }.spacing(14.vp).flexible(false)
     }
+}
+
+/** 常用城市建议：数量超过一屏，用于演示弹层内部滚动；组合框允许键入列表之外的城市。 */
+func majorCities(): Array<String> {
+    ["北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "西安", "南京", "苏州", "重庆", "天津",
+        "长沙", "郑州", "青岛", "大连", "厦门", "福州", "合肥", "昆明", "贵阳", "南宁", "哈尔滨", "沈阳"]
 }
 
 func settingsSection(title: String, body: () -> Unit): Unit {

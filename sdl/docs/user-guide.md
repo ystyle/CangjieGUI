@@ -44,8 +44,11 @@ while (let Some(event) <- current) {
 - 纹理：`texture`、`textureRotated`。
 - 状态：缩放、视口、裁剪、颜色缩放、垂直同步和渲染目标解析。
 
-`Renderer.headless()` 返回无设备渲染器，绘制为无操作，适合测试布局和事件逻辑；它不代表真实字体或
-GPU 输出验证。
+`Renderer.headless()` 返回无设备渲染器，适合测试布局和事件逻辑。无头契约：**所有渲染入口均为
+无操作**（含 `beginScene`/`endScene`/`clear`/`present`/`captureBmp` 与全部图元、视口、垂直同步、
+颜色缩放设置），**所有查询返回中性值**（`vsync()` 为 0、`viewport()` 为零矩形、`colorScale()` 为
+1.0；裁剪查询回退到逻辑裁剪栈——`pushClip`/`popClip`/`currentClip` 无头下照常维护）。文本度量
+使用确定性的替身宽高，便于断言；它不代表真实字体或 GPU 输出验证。
 
 ## 4. 字体与文本
 

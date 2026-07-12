@@ -187,6 +187,10 @@ class ModifiedWidget <: Widget {
         child.focusableId()
     }
 
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
+    }
+
     /** Resolves an exact-size length, clamped to non-negative logical pixels. */
     private func exact(ctx: UiContext, length: Length): Float32 {
         max(0.0, ctx.resolve(length))

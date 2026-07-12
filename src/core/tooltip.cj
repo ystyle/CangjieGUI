@@ -75,6 +75,10 @@ public class Tooltip <: Widget {
     public func focusableId(): ?String {
         child.focusableId()
     }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
+    }
 }
 
 /*

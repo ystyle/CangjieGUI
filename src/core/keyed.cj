@@ -50,6 +50,10 @@ public class Keyed <: Widget {
     public func focusableId(): ?String {
         child.focusableId()
     }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
+    }
 }
 
 /**

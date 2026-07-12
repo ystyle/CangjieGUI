@@ -35,6 +35,10 @@ public class VStack <: Widget {
         stack.isFlexible()
     }
 
+    public func focusableIds(): Array<String> {
+        stack.focusableIds()
+    }
+
     /** Sets the gap between adjacent children, e.g. `.spacing(12.vp)`. */
     public func spacing(value: Length): VStack {
         stack.setSpacing(value)
@@ -96,6 +100,10 @@ public class HStack <: Widget {
 
     public func isFlexible(): Bool {
         stack.isFlexible()
+    }
+
+    public func focusableIds(): Array<String> {
+        stack.focusableIds()
     }
 
     /** Sets the gap between adjacent children, e.g. `.spacing(12.vp)`. */
@@ -178,5 +186,9 @@ public class Flexible <: Widget {
 
     public func focusableId(): ?String {
         child.focusableId()
+    }
+
+    public func focusableIds(): Array<String> {
+        child.focusableIds()
     }
 }

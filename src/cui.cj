@@ -112,6 +112,8 @@ public import cui.desktop.DesktopApp
 public import cui.media.CanvasWidget
 public import cui.media.ImageFit
 public import cui.media.ImageView
+public import cui.media.clearImageCache
+public import cui.media.invalidateImage
 public import cui.text.ComboBox
 public import cui.text.TextArea
 public import cui.text.TextEditState
