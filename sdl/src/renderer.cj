@@ -422,6 +422,28 @@ public class Renderer {
     }
 
     /**
+     * Draws a textured triangle strip for skinned or deformable sprites: `points` holds
+     * consecutive (left, right) vertex pairs along the strip in draw coordinates, and
+     * `texPoints` holds matching texture coordinates in source-image pixels. `alphas`
+     * optionally gives one opacity per vertex, letting overlapping parts cross-fade.
+     * All provided lists need the same even size of at least four; invalid sizes draw
+     * nothing.
+     *
+     * Throws `CuiException` when the texture is closed.
+     */
+    public func texturedStrip(
+        texture: Texture,
+        points: ArrayList<Point>,
+        texPoints: ArrayList<Point>,
+        alphas!: ?ArrayList<Float32> = None
+    ): Unit {
+        if (texture.isClosed()) {
+            throw CuiException("Cannot render a closed texture.")
+        }
+        geometry.texturedStrip(ptr, texture.ptr, points, texPoints, alphas, texture.width, texture.height)
+    }
+
+    /**
      * Draws UTF-8 text with the platform UI font through SDL3_ttf.
      *
      * Text takes a dedicated path through the render scale: glyphs are rasterized by

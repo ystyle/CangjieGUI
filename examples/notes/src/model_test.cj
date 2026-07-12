@@ -27,6 +27,7 @@ func addAndDeleteKeepSelectionInRange(): Unit {
     @Expect(model.notes.value.size, before + 1)
     @Expect(model.selected.value, before) // 新建的笔记成为选中项
     @Expect(model.body.value, "") // 且初始正文为空
+    @Expect(model.titles()[before], "无标题") // 空正文的侧栏标题回退为占位文本，且取标题不越界
 
     model.deleteSelected()
     @Expect(model.notes.value.size, before)

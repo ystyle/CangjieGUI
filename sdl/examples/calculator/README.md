@@ -1,7 +1,7 @@
-# 计算器示例教学
+# 计算器示例
 
-一个 420×640 固定尺寸的四则运算计算器，覆盖图形应用最常见的三类需求：**指针命中测试**、
-**键盘文本输入**和**自定义控件绘制**。建议先运行起来，再对照本文阅读源码。
+一个 420×640 固定尺寸的四则运算计算器，覆盖图形应用最常见的三类需求：指针命中测试、
+键盘文本输入与自定义控件绘制。建议先运行示例，再对照本文阅读源码。
 
 <img src="screenshot.png" width="42%" alt="计算器运行效果">
 
@@ -31,7 +31,7 @@ cjpm run
 | `src/render.cj` | 渲染：背景、显示面板、按键 |
 | `src/theme.cj` | 调色板 |
 
-结构上刻意做了三层分离：**logic 不依赖 sdl**（纯状态变换，可单独测试），loop 把事件翻译成
+结构上刻意做了三层分离：logic 不依赖 sdl（纯状态变换，可单独测试），loop 把事件翻译成
 逻辑调用，render 只读状态绘制画面。
 
 ## 入口与资源生命周期
@@ -46,21 +46,21 @@ main(): Int64 {
 ```
 
 `SdlWindow` 实现 `Resource`，用 try-with-resources 管理，任何退出路径（包括异常）都会关闭
-窗口并释放渲染器。布局是绝对坐标，所以窗口设为不可调整大小；需要自适应布局时改为
+窗口并释放渲染器。布局是绝对坐标，因此窗口设为不可调整大小；需要自适应布局时改为
 `resizable: true` 并响应 `UiEvent.WindowResized`。
 
 ## 状态建模
 
 `state.cj` 中的常量全部收拢进语义类型：`View`（窗口）、`Panel`（显示面板）、`Pad`（按键网格）。
-按键由 `buttonRect(col, row, span)` 从网格坐标换算矩形，`"0"` 键 `span = 2` 占两列——增删按键
-只需改 `buildButtons` 里的一行。
+按键由 `buttonRect(col, row, span)` 从网格坐标换算矩形，`"0"` 键 `span = 2` 占两列，增删按键
+只需改 `buildButtons` 中的一行。
 
-`CalcState` 是典型的"标准计算器"状态机：
+`CalcState` 是典型的“标准计算器”状态机：
 
 - `display`：当前读数文本（唯一的输入缓冲）。
-- `stored` + `pending`：已存左操作数与待执行运算，`pending: ?CalcOp` 用 `Option` 表达
-  "尚未选择运算符"。
-- `shouldResetDisplay`：按过运算符后，下一个数字键开始新数而不是追加。
+- `stored` 与 `pending`：已存左操作数与待执行运算，`pending: ?CalcOp` 用 `Option` 表达
+  “尚未选择运算符”。
+- `shouldResetDisplay`：按过运算符后，下一个数字键开始新数而非追加。
 - `hasError`：除零后进入错误态，任何输入先清盘再生效。
 
 ## 事件循环
@@ -82,9 +82,9 @@ while (state.isRunning) {
 
 两条输入路径都翻译成同一个 `press(state, label)` 调用：
 
-- **鼠标**：`UiEvent.MouseDown(MouseButton.Left, x, y)` 事件坐标就是逻辑坐标，逐个按键做
+- 鼠标：`UiEvent.MouseDown(MouseButton.Left, x, y)` 事件坐标就是逻辑坐标，逐个按键做
   `rect.contains(x, y)` 命中测试。
-- **键盘**：字符类输入不匹配 `KeyDown` 扫描码，而是监听 `UiEvent.TextInput`——窗口创建时
+- 键盘：字符类输入不匹配 `KeyDown` 扫描码，而是监听 `UiEvent.TextInput`；窗口创建时
   已自动开启文本输入，系统处理好修饰键与键盘布局后交付字符串，示例只需按 `Rune` 映射到
   按键标签（`*` 与 `x` 都映射到 `×`）。`Enter`、`Backspace`、`Esc` 这类控制键仍走 `KeyDown`。
 
@@ -99,18 +99,18 @@ renderer.endScene()                                        // 解析回窗口（
 renderer.present()
 ```
 
-值得对照源码看的几个点：
+以下几点值得对照源码理解：
 
-- **圆角与描边**：面板与按键用 `fillRoundedRect` 打底、`strokeRoundedRect` + `Pen` 描边，
-  代替旧式直角 `fill` + `rect`。
-- **软阴影**：按键投影用 `fillRoundedRectSoft(..., feather: 6.0)`，边缘按羽化像素渐隐，
+- 圆角与描边：面板与按键用 `fillRoundedRect` 打底、`strokeRoundedRect` 加 `Pen` 描边，
+  代替旧式直角 `fill` 加 `rect`。
+- 软阴影：按键投影用 `fillRoundedRectSoft(..., feather: 6.0)`，边缘按羽化像素渐隐，
   一次调用得到无带状伪影的阴影。
-- **文字排版**：TTF 文字按 `pointSize` 指定字号（`FontSizes` 提供标准档位）。渲染器没有
-  右对齐接口，`drawTextRight` 用 `textWidth` 度量后左移绘制；读数超宽时降字号——这就是
-  "度量驱动排版"的最小示例。按键标签直接 `textCenter(label, rect, ...)` 在矩形内居中。
-- **背景渐变**：横条带逐行插值颜色近似垂直渐变，简单且够用。
+- 文字排版：TTF 文字按 `pointSize` 指定字号（`FontSizes` 提供标准档位）。渲染器没有
+  右对齐接口，`drawTextRight` 用 `textWidth` 度量后左移绘制；读数超宽时降字号，这就是
+  度量驱动排版的最小示例。按键标签直接 `textCenter(label, rect, ...)` 在矩形内居中。
+- 背景渐变：横条带逐行插值颜色近似垂直渐变，简单且足够。
 
-## 练习建议
+## 扩展方向
 
 1. 给按键加按下反馈：记录 `MouseDown`/`MouseUp`，按下时把按键矩形 `shift(0.0, 2.0)` 再绘制。
 2. 支持连按 `=` 重复上一次运算（记录最后一次操作数）。

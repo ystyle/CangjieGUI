@@ -104,6 +104,51 @@ internal class GeometryBatch {
     }
 
     /**
+     * Draws a textured triangle strip. `points` holds consecutive (left, right) vertex
+     * pairs along the strip; `texPoints` holds matching texture coordinates in source
+     * pixels, normalized here against the texture size. `alphas` optionally fades each
+     * vertex (used to cross-fade overlapping skinned parts); vertex colours stay white so
+     * the texture is otherwise sampled unmodified. Invalid sizes draw nothing.
+     */
+    func texturedStrip(
+        renderer: CPointer<Unit>,
+        texture: CPointer<Unit>,
+        points: ArrayList<Point>,
+        texPoints: ArrayList<Point>,
+        alphas: ?ArrayList<Float32>,
+        texWidth: Float32,
+        texHeight: Float32
+    ): Unit {
+        let count = points.size
+        var isStrip = count >= 4 && count % 2 == 0 && texPoints.size == count
+        if (let Some(values) <- alphas) {
+            isStrip = isStrip && values.size == count
+        }
+        if (renderer.isNull() || texture.isNull() || !isStrip || texWidth <= 0.0 || texHeight <= 0.0) {
+            return
+        }
+        let rungs = count / 2
+        begin(renderer, Color.rgb(255, 255, 255), count, 6 * (rungs - 1))
+        var i: Int64 = 0
+        while (i < count) {
+            let alpha: Float32 = match (alphas) {
+                case Some(values) => values[i]
+                case None => Float32(1.0)
+            }
+            pushTexturedVertex(points[i].x, points[i].y, texPoints[i].x / texWidth, texPoints[i].y / texHeight, alpha)
+            i += 1
+        }
+        var rung: Int64 = 0
+        while (rung < rungs - 1) {
+            let a = rung * 2
+            pushTriangle(a, a + 1, a + 3)
+            pushTriangle(a, a + 3, a + 2)
+            rung += 1
+        }
+        flushWith(texture)
+    }
+
+    /**
      * Frees the native vertex/index buffers. Safe to call repeatedly; the batch simply
      * reallocates on next use, so this is called when the owning renderer shuts down.
      */
@@ -401,6 +446,23 @@ internal class GeometryBatch {
         vertCount += 1
     }
 
+    private func pushTexturedVertex(x: Float32, y: Float32, u: Float32, v: Float32, alpha: Float32): Unit {
+        if (vertCount >= vertCap) {
+            return
+        }
+        var vertex = SdlVertex()
+        vertex.px = x
+        vertex.py = y
+        vertex.colR = colR
+        vertex.colG = colG
+        vertex.colB = colB
+        vertex.colA = colA * alpha
+        vertex.tu = u
+        vertex.tv = v
+        unsafe { verts.write(vertCount, vertex) }
+        vertCount += 1
+    }
+
     private func pushTriangle(a: Int64, b: Int64, c: Int64): Unit {
         if (idxCount + 3 > idxCap) {
             return
@@ -414,11 +476,15 @@ internal class GeometryBatch {
     }
 
     private func flush(): Unit {
+        flushWith(CPointer<Unit>())
+    }
+
+    private func flushWith(texture: CPointer<Unit>): Unit {
         if (idxCount == 0 || target.isNull() || verts.isNull() || idxs.isNull()) {
             return
         }
         let _ = unsafe {
-            SDL_RenderGeometry(target, CPointer<Unit>(), verts, Int32(vertCount), idxs, Int32(idxCount))
+            SDL_RenderGeometry(target, texture, verts, Int32(vertCount), idxs, Int32(idxCount))
         }
     }
 }

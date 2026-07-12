@@ -11,14 +11,14 @@ sdl = { path = "../.." }
 | 示例 | 内容 | 主要演示 |
 |---|---|---|
 | [calculator](calculator/) | 四则运算计算器 | 鼠标命中测试、键盘文本输入、圆角面板与按键、文字度量与对齐 |
-| [game](game/) | 雷霆战机纵版射击 | 固定逻辑尺寸的帧循环、按键持续状态、AABB 碰撞、粒子特效、HUD |
+| [thunder](thunder/) | 雷霆战机纵版射击 | 固定逻辑尺寸的帧循环、按键持续状态、AABB 碰撞、粒子特效、HUD |
 
 两个示例都配有教学文档（各自目录下的 `README.md`），从入口装配、状态建模、事件处理到
 渲染分层逐段讲解，适合作为使用 `sdl` 模块开发图形应用的起步范本。
 
 ## 构建与运行
 
-在示例目录（`examples/calculator` 或 `examples/game`）中：
+在示例目录（`examples/calculator` 或 `examples/thunder`）中：
 
 ```powershell
 cjpm build

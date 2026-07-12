@@ -61,10 +61,11 @@ func withBodyAt(notes: Array<Note>, index: Int64, body: String): Array<Note> {
 
 /** 笔记的侧栏标题：取正文首行，为空时显示占位文本。 */
 func noteTitle(body: String): String {
-    let firstLine = body.split("\n")[0]
-    if (firstLine.isEmpty()) {
+    // 空串在仓颉中 split 得到空数组，故先判空再取首行，避免越界。
+    let lines = body.split("\n")
+    if (lines.isEmpty() || lines[0].isEmpty()) {
         "无标题"
     } else {
-        firstLine
+        lines[0]
     }
 }
