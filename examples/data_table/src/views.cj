@@ -20,7 +20,7 @@ func fleetView(model: FleetModel): Unit {
 func header(): Unit {
     VStack {
         Label("服务器机群监控").fontSize(TABLE_TITLE)
-        Label("点击列头排序（数值列按数值），点击行或用方向键选择").muted().fontSize(FontSizes.CAPTION)
+        Label("点击列头排序，点击行或用方向键选择").muted().fontSize(FontSizes.CAPTION)
     }.spacing(3.vp).hug()
 }
 
