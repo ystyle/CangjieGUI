@@ -139,6 +139,7 @@ cjpm run
 - [CUI 组件文档](docs/components.md)
 - [CUI API 文档](docs/api-reference.md)
 - [SDL API 文档](sdl/docs/README.md)
+- [现代 GUI 核心范式洞察辨析：函数式/对象式，立即模式/保留模式](docs/modern-GUI-insights-and-analysis.md)
 
 ## 示例应用
 
