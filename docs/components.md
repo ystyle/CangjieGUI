@@ -26,9 +26,32 @@
 | 固定/边界尺寸 | `width`、`height`、`minWidth`、`maxWidth`、`minHeight`、`maxHeight`（`Length` 或 `Float32`） |
 | 填充 | `fillWidth()`、`fillHeight()` |
 | 间距 | `padding(all)`、`padding(horizontal, vertical)`、`padding(left, top, right, bottom)` |
-| 表面 | `background(color)`、`background(color, radius)`、`surface(style)` |
+| 表面 | `background(color)`、`background(color, radius)`、`background(color, corners:)`、`gradientBackground(Gradient[, radius])`、`surface(style)` |
+| 阴影/边框 | `shadow(Shadow)`、`shadow(Shadow, radius:)`、`shadow(Array<Shadow>[, radius:])`、`border(color)`、`border(color, width:)`、`border(color, width:, radius:)`、`dashedBorder(color[, radius:])`、`dashedBorder(color, width:, radius:, dash:, gap:)` |
 | 弹性 | `flex()`、`flex(weight)`（在所在栈的剩余空间中按权重占位） |
 | 条件 | `visible(isVisible)`、`enabled(isEnabled)` |
+
+阴影与边框的绘制顺序固定正确（阴影在内容之前绘于其后，边框在内容之后绘于其上），故典型卡片按
+`background(fill, radius) → shadow(...) → border(...)` 顺序链式即可，各修饰符传入同一 `radius` 与圆角吻合。
+`Shadow(color!, offsetY!=2, offsetX!=0, blur!=12, spread!=0)` 是可配软阴影（CSS box-shadow / Material 模型），
+`Shadow.elevation(level, color!)` 是 Material 式高度预设（level 1..6，越高偏移越大、模糊越柔）。
+`shadow(Array<Shadow>)` 按数组顺序叠绘多层投影（先画的在最深处）；`Shadow.keyAmbient(level, color!)` 给出
+Material 双层预设——宽而淡的环境层在前、窄而深的方向层在后，深度感优于单层（见 `examples/shadows` 对照）。
+阴影/边框是装饰，不改变量得的尺寸。
+注意：极大的阴影（高 elevation）在滚动容器内可能被视口边缘裁切（框架预留固定阴影余量），卡片高度宜适度。
+
+`Gradient(start!, end!, vertical!=true)` 是两色线性渐变（纵向顶→底或横向左→右），由 `gradientBackground` 填充圆角背景；
+`reversed()` 交换两色标。渐变复用与实填相同的缓存网格、逐顶点着色，不额外增加三角剖分，故与实填同等廉价。
+
+`Corners(topLeft!, topRight!, bottomRight!, bottomLeft!)`（缺省各 0）是四角各自取半径的背景造型，即 CSS 四值
+`border-radius` 的对应物，由 `background(color, corners!:)` 填充：适合聊天气泡（三角圆润、发送者一侧的下角收成
+尾角）、上圆下方的页签与自边缘升起的抽屉。常用造型有工厂 `Corners.all(r)`、`top(r)`、`bottom(r)`、`left(r)`、
+`right(r)`。半径以 vp 计、绘制时随缩放解析为像素，每个角自动钳到短边一半。它走独立的逐次剖分路径，既有统一
+圆角的缓存网格热路径不受影响；`Corners.all(r)` 与 `background(color, r)` 造型等价。逐角圆角同样是装饰，不改尺寸。
+
+`dashedBorder(color, width:, radius:, dash:, gap:)` 沿圆角矩形周边等距行进画虚线（`dash` 像素实线、`gap` 像素间隔），
+转角处仍均匀；缺省 `dashedBorder(color)` 为线宽 1.5、dash 6、gap 4。它是既有实线 `border` 的可选变体，走独立的
+逐段绘制路径（每段一个圆头线段），不影响实线描边。适合拖放区、占位框等。`dash` 或 `gap` 非正时退化为实线。
 
 ---
 
@@ -190,6 +213,28 @@ Accordion(sections: Array<AccordionSection>, single!: Bool = false,
 ```cangjie
 AccordionSection("外观") {=> appearanceBody() }
 ```
+
+### Reveal
+
+动画折叠容器：`shown` 翻转时用 `Animator` 缓动自身高度在 0 与内容自然高度之间，内容裁剪着从顶部滑入滑出，
+其下布局随之平滑回流。是“条件显示”的声明式过渡对应物——包住任意子树，切换 `shown` 即动画展开/收起。适合
+FAQ、披露区、可展开详情等。
+
+```cangjie
+Reveal(shown!: Bool, key!: ?String = None, duration!: UInt64 = 220,
+    easing!: Easing = Easing.EaseInOutQuad, delay!: UInt64 = 0) {=> body() }
+```
+
+- shown!：是否展开；翻转即触发缓动。
+- key!：可选身份，缺省按构建序派生（用于跨帧保留动画进度）。
+- duration!：动画时长（毫秒）；easing!：缓动曲线（见 `Easing`）；delay!：缓动开始前的等待（毫秒）。
+
+展开进度以 `Animator` 经 `localState` 跨帧保留，故每帧重建不丢动画；创建即处于目标态时静止（静态快照不动）。
+子件以完整高度布局、按已揭示高度裁剪绘制，故内容从顶部滑入而非压扁。
+
+给一组 `Reveal` 各配一个「行号 × 步进」的 `delay`，即得依次落位的**交错入场**瀑布（见 `examples/stagger`）。
+注意 `duration`/`easing`/`delay` 在内部 `Animator` **首次创建时**读取（进度需跨帧存活，故存于 `localState`），
+因此改这些时序参数需让 `key` 随之变化，才会以新时序重建。
 
 ### Spacer
 
@@ -380,31 +425,88 @@ Label(text: String, muted!: Bool = false, align!: TextAlign = TextAlign.Leading,
 - color!：覆盖文字色。
 - fontSize!：字号。
 
-修饰符：`muted()`、`muted(Bool)`、`textAlign(TextAlign)`、`foregroundColor(Color)`、`fontSize(Length | Float32)`、`maxLines(Int64)`（须大于 0）、`wrap()`。
+修饰符：`muted()`、`muted(Bool)`、`textAlign(TextAlign)`、`foregroundColor(Color)`、`fontSize(Length | Float32)`、`maxLines(Int64)`（须大于 0）、`wrap()`、`bold()`、`italic()`、`underline()`、`strikethrough()`、`fontStyle(FontStyle)`、`fontFamily(String)`。
+
+字体样式修饰符 `bold()` / `italic()` / `underline()` / `strikethrough()` 各接受可选布尔参数（如 `bold(value: false)` 关闭），可链式叠加；`fontStyle(FontStyle)` 一次性替换整套样式。粗体优先加载同目录的真粗体伴生字面（`msyh.ttc` 对应 `msyhbd.ttc`、`segoeui.ttf` 对应 `segoeuib.ttf`、`X-Regular` 对应 `X-Bold`），字形边缘与常规字重同样平滑；无伴生文件时回退 SDL_ttf 合成加粗。斜体倾斜字形、下划线/删除线加线，由渲染层合成，Latin 与 CJK 一致生效。度量随样式变化（粗体更宽），布局与省略号、换行判定均按实绘样式计算。
+
+`fontFamily(String)` 以已注册的应用字体名渲染（见 `Fonts`）。未知名称或加载失败的字体文件自动回退平台 UI 字体。字体名与字体样式可叠加（例如某加载字体的粗体）。
+
+### FontStyle
+
+字体样式值类型：粗体、斜体、下划线、删除线四个开关的不可变组合，可自由叠加。
+
+```cangjie
+FontStyle(bold!: Bool = false, italic!: Bool = false, underline!: Bool = false, strikethrough!: Bool = false)
+FontStyle.regular            // 常规样式（无任何开关）
+```
+
+- 字段：`bold` / `italic` / `underline` / `strikethrough`（只读）；`isRegular` 属性表示是否为常规。
+- 组合器：`withBold(value!: Bool = true)`、`withItalic(...)`、`withUnderline(...)`、`withStrikethrough(...)` 返回改动单个开关后的新值。
+- 相等：实现 `==` / `!=`，可用于状态比较与缓存判等。
+
+`Label`、`Renderer.text` / `textWidth` / `textHeight` / `textCenter` 均接受 `style!: FontStyle = FontStyle.regular` 命名参数。
+
+### Fonts
+
+进程级字体注册表，按名映射到本地字体文件路径（`.ttf` / `.ttc` / `.otf`），风格类似 CSS `@font-face`。启动时注册一次，之后由 `Label.fontFamily(name)` 或 `Renderer.text(..., font: name)` 按名引用；渲染层首次使用时惰性打开文件并缓存。
+多字重即多次注册——每个字重文件各占一名（如 `brand-light` / `brand` / `brand-bold`），切换字重就是切换名字；CJK 字体文件同样适用（见 `examples/wenkai` 的霞鹜文楷样本册）。
+
+```cangjie
+Fonts.register(name: String, path: String)   // 记录 名称→文件路径（仅登记，不触碰文件系统）
+Fonts.pathFor(name: String): ?String          // 查询已注册路径
+Fonts.isRegistered(name: String): Bool
+Fonts.unregister(name: String)
+Fonts.clear()                                  // 清空（主要用于测试隔离）
+Fonts.names(): Array<String>
+```
+
+- 解析宽容：未注册的名称、或无法作为字体打开的路径，都回退平台 UI 字体而非报错。
+- 每个字体面（按文件路径）各自维护度量与成形缓存，默认系统字体走原有热路径不受影响。
+- 注册表为全局、无锁，契合 CUI 单线程 UI 模型；请在渲染前于主线程注册。
+
+平台已安装字体也可用：给出该字体文件的路径即可（例如 `C:\Windows\Fonts\georgia.ttf`）；按字体族名自动解析路径为后续增强项。
 
 ### RichText
 
-内联样式文本：由若干 `RichSpan`（着色文本段与内联图标）拼成一行，超宽自动换行到多行。文本段共享同一
-字号、以颜色区分（渲染层无粗斜体、无逐段基线度量），图标随文流动。是 `Label`（单一样式）的多样式、
-图文混排对应物。
+内联样式文本：由若干 `RichSpan`（着色、带样式的文本段与内联图标）拼成一行，超宽自动换行到多行。文本段
+可逐段设颜色、粗体/斜体/下划线/删除线、字体、字号与高亮底盒；未设字号者继承 `RichText` 的基准字号。图标随文
+流动。是 `Label`（单一样式）的多样式、图文混排对应物。
 
 ```cangjie
-RichText(spans: Array<RichSpan>, fontSize!: Length = Length(FontSizes.BODY, LengthUnit.Fp))
+RichText(spans: Array<RichSpan>, fontSize!: Length = Length(FontSizes.BODY, LengthUnit.Fp), key!: ?String = None)
 ```
 
-- spans：样式段数组；fontSize! 所有文本段共享的字号。
+- spans：样式段数组；fontSize! 未单独设字号的文本段所继承的基准字号；key! 可选点击身份（用于链接段的按压跟踪）。
 
-修饰符：`fontSize(Length | Float32)`。单行时按内容收缩（便于行内嵌入），换行后填满宽度。
+修饰符：`fontSize(Length | Float32)`（基准字号）。单行时按内容收缩（便于行内嵌入），换行后填满宽度。逐段样式使
+度量按各段实绘宽度计算（粗体/大字号更宽），换行在真实溢出处断行。断行规则分文种：CJK 逐字符填行；含空格的
+文本回退到最近空格后断开；从行中开始、整体能放进一个满行的 ASCII 词（标识符、议题号）整词移到下一行而不被
+切开（比满行还宽的词仍逐字符切分兜底）；断点空格不带进续行。同一行内不同字号的文本段相互居中对齐，行高
+随该行最大字号增长（如「大号数值 + 小号单位」）。
 
 ### RichSpan
 
-`RichText` 的一段：着色文本或内联图标。由工厂构造。
+`RichText` 的一段：着色文本或内联图标。由工厂构造，再链式叠加样式构建器。
 
 ```cangjie
 RichSpan.text(text: String, color!: ?Color = None) // 默认或指定颜色的文本段
 RichSpan.muted(text: String)                        // 次要（弱化）文字色
 RichSpan.icon(icon: IconName, color!: ?Color = None) // 内联图标，按行高取尺寸
 ```
+
+样式构建器（返回改动后的新段，可链式）：`bold(value!: Bool = true)`、`italic(...)`、`underline(...)`、
+`strikethrough(...)`、`fontStyle(FontStyle)`、`fontFamily(String)`、`fontSize(Length | Float32)`、`onTap(() -> Unit)`、
+`highlight(Color)`。例如 `RichSpan.text("128").bold().fontSize(30.0)` 配 `RichSpan.muted(" MB").fontSize(13.0)` 即
+「大号数值 + 小号单位」。图标段忽略文本样式，按行高取尺寸。
+
+`highlight(background)` 在该段文字之下绘制一个圆角高亮底盒（`<mark>` 式背景），常用于标记搜索命中的关键词。
+它是纯视觉层：不改变布局几何，也不改动该段文字颜色（需要对比时自行配 `text(color:)`）。底盒恰覆盖该段的各
+片段、不加横向留白；相邻两个各自高亮的段在接缝处各圆各的角，需要连成一体的整段标记应写成单个段。
+
+`onTap(action)` 把该段变为可点击链接：悬停显示手型光标，按下并在同一段释放即运行 `action`；每个链接段也是一个
+键盘焦点停靠点——`Tab` 依声明序在链接间移动，`Enter`/空格激活聚焦的链接，聚焦时绘制焦点环。链接的样式（如
+链接色 + 下划线）由既有构建器自行设置（例如 `RichSpan.text("打开", color: accent).underline().onTap {...}`）。无
+链接段的 `RichText` 不注册焦点、保持惰性、不拦截事件。给 `RichText(spans, key!: ?String)` 传 `key` 可稳定其焦点/点击身份。
 
 ### Icon
 

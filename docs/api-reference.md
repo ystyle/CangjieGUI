@@ -27,7 +27,7 @@
 | `handle(ctx, event): Bool` | 返回事件是否已消费 |
 | `isFlexible(): Bool` | 默认 `false` |
 | `flexWeight(): Float32` | 默认 `1.0` |
-| `acceptsStretch(axis): Bool` | 默认 `true`；显式最大/固定尺寸修饰器会拒绝对应轴拉伸 |
+| `acceptsStretch(axis): Bool` | 默认 `true`；显式最大/固定尺寸修饰器拒绝自身轴拉伸、另一轴委托子件（链式 `.width().height()` 两轴皆刚性） |
 | `participatesInLayout(): Bool` | 默认 `true`；`visible(false)` 返回 `false` |
 
 通用链式修饰器均返回 `Widget`（尺寸参数为 `Length`，另有按 vp 解释的 `Float32` 重载）：
@@ -38,10 +38,17 @@
 | 填充 | `fillWidth()`、`fillHeight()` |
 | 间距 | `padding(all)`、`padding(horizontal, vertical)`、`padding(left, top, right, bottom)` |
 | 表面 | `background(color)`、`background(color, radius)`、`surface(style)` |
+| 阴影/边框 | `shadow(Shadow)`、`shadow(Shadow, radius:)`、`border(color, width:, radius:)`（`Shadow` 可配 offset/blur/spread/color，`Shadow.elevation(level)` 为 Material 高度预设） |
 | 弹性 | `flex()`、`flex(weight)` |
 | 条件 | `visible(isVisible)`、`enabled(isEnabled)` |
 
 `emit(widget)` 把已有实例登记到当前构建块；块外调用不产生登记行为。
+
+自定义可交互控件与内置控件走同一套协议，三件套均从 `cui` 导出：构造期
+`focusableControlIdentity(base)` 取构建期唯一身份并登记为 Tab 焦点停靠点；`handle` 里
+`claimHoverIfInside(...)` 认领悬停光标、`ctx.hasFocus(id)` 门控 Enter/空格激活；`draw` 里
+`ctx.isHovered(id)` 画悬停底、`ctx.showFocusRing(id)` 配 `drawFocusRing(ctx, rect, radius)` 画
+标准焦点环（仅键盘到达时显示）。完整样例见 `examples/disclosure` 的 `FaqRow`。
 
 ## 3. 状态与身份
 
@@ -94,13 +101,14 @@
 
 `UiContext` 公开渲染器、主题、焦点/悬停/拖动/按压 ID、鼠标状态、关闭标志、`FrameInfo`，以及
 `displayScale`、`fontScale` 两个缩放因子。方法包括：`requestClose`、`hasFocus`、`focus`、
-`clearFocus`、`focusNext`、`focusPrevious`、`isHovered`、`claimHover(id, CursorShape)`、`beginDrag`、
+`clearFocus`、`focusNext`、`focusPrevious`、`isHovered`、`claimHover(id, CursorShape)`、
+`beginDrag(id, grab!)`（`grab!` 记录抓取点在被拖部件内的偏移，随拖动跨帧存续）、`dragGrab()`、
 `isDragging`、`clearDrag`、`press`、`isPressed`、`clearPress`、`resolve(Length): Float32`、
 `resolve(LengthInsets): Insets`。
 
 指针悬停：控件在 `handle` 中经 `claimHover` 请求一种
-`CursorShape`（`Default` / `Interactive` / `Text`）；内置控件统一通过框架内部助手
-`claimHoverIfInside` 调用它（该助手不对应用导出，自定义控件直接用 `claimHover`）。外壳在每次鼠标移动时结算最顶层的认领，并
+`CursorShape`（`Default` / `Interactive` / `Text`）；`claimHoverIfInside(ctx, event, frame, id, shape)`
+是其标准包装（MouseMove 落于 frame 内才认领，内置与自定义控件同用）。外壳在每次鼠标移动时结算最顶层的认领，并
 把对应形状映射为 SDL 系统光标；`DesktopApp.useBaseCursor(SystemCursor)` 设定无人认领时的静止
 光标。`isHovered(id)` 供绘制态使用（如按钮悬停浅高亮）。
 
@@ -118,6 +126,27 @@
 到达目标后精确停住，空闲零开销。`Switch`（滑块/轨道色）、`Checkbox`（勾选缩放）、
 `RadioButton`（圆点缩放）、`ProgressBar`（填充滑动）均以此实现状态切换的平滑过渡。
 `Color.lerp(other, t)` 在两色间按 `t∈[0,1]` 线性插值（用于随动画过渡颜色）。
+
+`Animator(value, duration=250, easing=EaseInOutQuad, delay=0)` 是**时长驱动**的补间原语，与物理弹簧互补：在**确定时长**内
+按选定缓动曲线从当前值缓动到目标（CSS 过渡 / SwiftUI 与 Compose 的 `.easeInOut(duration:)` 模型）。API 与 `Spring`
+一致——`target(v)`/`tick(deltaMs)`/`value`/`reset(v)`/`settled()`，控件在 `draw` 用 `animate(ctx, target:)` 一步推进并续帧；
+`goal` 读当前目标；中途改目标从当前值重新起缓；创建即在目标上则立即静止（静态快照不动）。缓动曲线由枚举 `Easing`
+提供：`Linear`、`EaseIn/Out/InOut` 的 `Quad`/`Cubic`/`Sine` 系列、`EaseOutBack`（回弹过冲）、以及 `CubicBezier(x1,y1,x2,y2)`
+（CSS 风格，数值解贝塞尔参数）；`ease(t)` 把归一化进度 `t∈[0,1]` 映射为缓动进度（`EaseOutBack` 会短暂超过 1）。
+
+`delay` 是每次重定目标后、缓动开始前按住不动的毫秒数（CSS `transition-delay` / SwiftUI `.delay()` 模型）：延迟期间
+值保持在起点且 `settled()` 为假（故仍续帧，脏帧循环不会在延迟里睡过去），延迟随每次重定目标重置。给一组元素各配
+一个「序号 × 步进」的 `delay` 即得**交错入场**瀑布（见 `examples/stagger`）。缺省 `delay=0` 时时间线与不带延迟完全一致。
+
+`Pulse(period=1200, autoreverse=true, easing=EaseInOutSine)` 是**重复时间线**原语（骨架屏呼吸、加载脉冲、不定进度扫掠）：
+无目标、永不静止，`value` 给出周期内的缓动位置——`autoreverse` 为往复（0→1→0），否则为锯齿扫掠。控件在 `draw` 里
+`animate(ctx)` 推进并读值；脉冲每帧请求下一帧（永动使然），故仅在有可见脉冲时耗帧。**共享即同步**：多个控件可共用
+一个 Pulse 各自调 `animate`，按帧戳去重、同帧只推进一次，不会倍速。相位按整周期回绕，长时间运行不丢精度。
+
+声明式过渡容器 `Reveal(shown!) {=> body }` 在 `shown` 翻转时用 `Animator` 缓动自身高度（0↔内容高度），内容裁剪着
+从顶部滑入滑出，其下布局平滑回流——“条件显示”的动画对应物。展开进度经 `localState` 跨帧保留（同控件保留 `Spring` 之法），
+故每帧重建不丢动画，创建即处于目标态时静止（快照稳定）。它也接受 `delay!`（透传给内部 `Animator`），故一组 `Reveal`
+各配一个递增延迟即成交错展开；注意 `duration`/`easing`/`delay` 在 `Animator` 首次创建时读取，改时序需让 `key` 随之变化。
 
 键盘焦点遍历：可聚焦控件在构建期按声明顺序登记进“焦点环”，`DesktopApp` 每帧构建后经
 `adoptFocusRing` 采纳，并在收到 `Tab`（`Shift+Tab` 反向）时调用 `focusNext` / `focusPrevious`
@@ -140,11 +169,21 @@
 
 ## 5. 主题
 
-`Theme` 包含背景、面板、边框、主/次文字、强调、危险、输入区域、阴影与圆角。常用方法：
+`Theme` 包含背景、面板、边框、主/次文字、强调、危险、输入区域、阴影与圆角。构造参数全部为命名参数
+（`Theme(bg: ..., panel: ..., panelEdge: ...)`）——十余个同型颜色靠名字区分角色，杜绝顺序错位。常用方法：
 
 - `Theme.light()`、`Theme.dark()`。
 - `panelSurface()`、`raisedSurface()`。
 - `fieldSurface(active)`、`buttonSurface(role)`、`selectedSurface()`。
+
+### 设计令牌
+
+命名的尺度令牌，让间距、圆角、动效在整个 UI 保持一致（Material/Fluent/iOS HIG 的 design-token 做法）。与既有的
+颜色（`Theme`）、字号（`FontSizes`）、高度（`Shadow.elevation`）一起构成设计系统。
+
+- `Spacing`（`Length`，4px 栅格）：`none`/`xs`(4)/`sm`(8)/`md`(12)/`lg`(16)/`xl`(24)/`xxl`(32) vp。用于 `padding`/`spacing`。
+- `Radii`（`Float32`，vp）：`none`/`sm`(6)/`md`(10)/`lg`(16)/`xl`(24)/`pill`(全圆)。用于 `background`/`border`/`shadow`/`gradientBackground` 的圆角。
+- `Motion`：时长 `fast`(120)/`normal`(220)/`slow`(360) ms + 缓动 `standard`(InOut)/`decelerate`(Out)/`accelerate`(In)/`emphasized`(回弹)。配 `Animator`/`Spring` 用，如 `Animator(0.0, duration: Motion.normal, easing: Motion.standard)`。
 
 ## 6. 布局与容器
 

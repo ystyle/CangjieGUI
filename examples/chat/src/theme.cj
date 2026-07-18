@@ -30,16 +30,16 @@ func senderAvatarColor(sender: String): Color {
 
 func chatTheme(): Theme {
     Theme(
-        Color.rgb(234, 238, 245), // bg（消息区底色）
-        Color.rgb(244, 246, 250), // panel
-        Color.rgb(220, 224, 232), // panelEdge
-        Color.rgb(32, 36, 46), // text
-        Color.rgb(120, 126, 140), // mutedText
-        Color.rgb(64, 120, 240), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(206, 74, 68), // danger
-        Color.rgb(255, 255, 255), // field
-        Color.rgb(238, 242, 252), // fieldActive
+        bg: Color.rgb(234, 238, 245), // bg（消息区底色）
+        panel: Color.rgb(244, 246, 250),
+        panelEdge: Color.rgb(220, 224, 232),
+        text: Color.rgb(32, 36, 46),
+        mutedText: Color.rgb(120, 126, 140),
+        accent: Color.rgb(64, 120, 240),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(206, 74, 68),
+        field: Color.rgb(255, 255, 255),
+        fieldActive: Color.rgb(238, 242, 252),
         panelRaised: Color.rgb(252, 253, 255), // 顶栏与输入栏底色
         accentSoft: Color.rgb(224, 233, 252),
         shadow: Color.rgba(30, 44, 80, 24),

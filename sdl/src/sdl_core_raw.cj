@@ -3,6 +3,8 @@ package sdl
 foreign {
     func SDL_Init(flags: UInt32): Bool
 
+    func SDL_QuitSubSystem(flags: UInt32): Unit
+
     func SDL_Quit(): Unit
 
     func SDL_GetError(): CString

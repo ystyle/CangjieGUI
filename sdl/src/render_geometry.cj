@@ -1,7 +1,6 @@
 package sdl
 
 import std.collection.ArrayList
-import std.collection.HashMap
 import std.math.cos
 import std.math.sin
 import std.math.sqrt
@@ -33,12 +32,6 @@ internal let MESH_KIND_FILL: Int64 = 0
 private let MESH_KIND_STROKE: Int64 = 1
 private let MESH_KIND_CIRCLE_FILL: Int64 = 2
 private let MESH_KIND_CIRCLE_STROKE: Int64 = 3
-
-// How many distinct shape meshes to retain before the older generation is dropped. A UI reuses a
-// small set of shapes (a few panel/card/chip sizes, each with a fill, a border and two shadow
-// layers), so this is ample; a churning shape (an animated size) simply misses and re-tessellates
-// as before, bounded by the two-generation eviction.
-private let MESH_CACHE_CAP: Int64 = 256
 
 internal class GeometryBatch {
     private var target = CPointer<Unit>()
@@ -101,6 +94,69 @@ internal class GeometryBatch {
         }
     }
 
+    /**
+     * A rounded rectangle filled with a linear gradient from `start` to `end`, vertical (top to bottom)
+     * or horizontal (left to right). Reuses the very same cached mesh a solid fill would build (same
+     * key), so it adds no tessellation and leaves the solid-fill path untouched. Extreme sizes outside
+     * the mesh-key budget fall back to a solid fill of the start colour.
+     */
+    func fillRoundedRectGradient(
+        renderer: CPointer<Unit>,
+        rect: Rect,
+        radius: Float32,
+        start: Color,
+        end: Color,
+        vertical: Bool
+    ): Unit {
+        if (renderer.isNull() || rect.w <= 0.0 || rect.h <= 0.0) {
+            return
+        }
+        let f = clampFeather(AA_FEATHER, min(rect.w, rect.h))
+        let extent = if (vertical) {
+            rect.h
+        } else {
+            rect.w
+        }
+        if (withinKeyBudget(rect.w, rect.h, radius, f)) {
+            let key = meshKey(MESH_KIND_FILL, rect.w, rect.h, radius, f)
+            let mesh = match (meshCache.get(key)) {
+                case Some(existing) => existing
+                case None =>
+                    buildRoundedRectPath(Rect(0.0, 0.0, rect.w, rect.h), radius)
+                    let built = buildFillMesh(f)
+                    meshCache.put(key, built)
+                    built
+            }
+            emitMeshGradient(renderer, mesh, rect.x, rect.y, extent, vertical, start, end)
+        } else {
+            buildRoundedRectPath(rect, radius)
+            fillPath(renderer, start, f)
+        }
+    }
+
+    /**
+     * A rounded rectangle whose four corners take independent radii (top-left, top-right, bottom-right,
+     * bottom-left), for bubbles, top-rounded tabs and edge-docked sheets. Tessellated per call rather
+     * than through the shared same-radius mesh cache — per-corner shapes are few, and this leaves the
+     * hot uniform-radius fill path completely untouched. Each radius is clamped to half the short side.
+     */
+    func fillPerCornerRoundedRect(
+        renderer: CPointer<Unit>,
+        rect: Rect,
+        topLeft: Float32,
+        topRight: Float32,
+        bottomRight: Float32,
+        bottomLeft: Float32,
+        color: Color
+    ): Unit {
+        if (renderer.isNull() || rect.w <= 0.0 || rect.h <= 0.0) {
+            return
+        }
+        let f = clampFeather(AA_FEATHER, min(rect.w, rect.h))
+        buildRoundedRectPathPerCorner(rect, topLeft, topRight, bottomRight, bottomLeft)
+        fillPath(renderer, color, f)
+    }
+
     func strokeRoundedRect(renderer: CPointer<Unit>, rect: Rect, radius: Float32, pen: Pen): Unit {
         if (renderer.isNull() || rect.w <= 0.0 || rect.h <= 0.0 || pen.width <= 0.0) {
             return
@@ -119,6 +175,79 @@ internal class GeometryBatch {
         } else {
             buildRoundedRectPath(rect, radius)
             strokePath(renderer, pen)
+        }
+    }
+
+    /**
+     * A dashed rounded-rectangle outline: `dash` pixels drawn, `gap` pixels skipped, marched
+     * continuously around the perimeter (so corners keep even dashes). Each dash is one round-capped
+     * `strokeSegment`, so this is not the cached-mesh path — it is the opt-in dashed variant that leaves
+     * the solid stroke untouched. A non-positive dash or gap falls back to a solid stroke.
+     */
+    func strokeRoundedRectDashed(
+        renderer: CPointer<Unit>,
+        rect: Rect,
+        radius: Float32,
+        pen: Pen,
+        dash: Float32,
+        gap: Float32
+    ): Unit {
+        if (renderer.isNull() || rect.w <= 0.0 || rect.h <= 0.0 || pen.width <= 0.0) {
+            return
+        }
+        if (dash <= 0.0 || gap <= 0.0) {
+            strokeRoundedRect(renderer, rect, radius, pen)
+            return
+        }
+        // Build the closed outline polyline, then copy it — strokeSegment below rebuilds the shared
+        // path buffer for each dash, so we must not iterate the live buffer while drawing.
+        buildRoundedRectPath(rect, radius)
+        let n = pathX.size
+        if (n < 2) {
+            return
+        }
+        let px = ArrayList<Float32>()
+        let py = ArrayList<Float32>()
+        var c = 0
+        while (c < n) {
+            px.add(pathX[c])
+            py.add(pathY[c])
+            c += 1
+        }
+        // March the dash pattern around the closed polyline, carrying the on/off remainder across edges.
+        var penDown = true
+        var remaining = dash
+        var i = 0
+        while (i < n) {
+            let ax = px[i]
+            let ay = py[i]
+            let j = (i + 1) % n
+            let dx = px[j] - ax
+            let dy = py[j] - ay
+            let edgeLen = sqrt(dx * dx + dy * dy)
+            if (edgeLen > 0.0001) {
+                var t0: Float32 = 0.0
+                while (t0 < edgeLen) {
+                    let seg = min(remaining, edgeLen - t0)
+                    if (penDown && seg > 0.0) {
+                        let s0 = t0 / edgeLen
+                        let s1 = (t0 + seg) / edgeLen
+                        strokeSegment(renderer, Point(ax + dx * s0, ay + dy * s0),
+                            Point(ax + dx * s1, ay + dy * s1), pen)
+                    }
+                    t0 += seg
+                    remaining -= seg
+                    if (remaining <= 0.0001) {
+                        penDown = !penDown
+                        remaining = if (penDown) {
+                            dash
+                        } else {
+                            gap
+                        }
+                    }
+                }
+            }
+            i += 1
         }
     }
 
@@ -500,6 +629,68 @@ internal class GeometryBatch {
         }
     }
 
+    // Emits a cached fill mesh translated by (dx, dy) with a linear gradient: each vertex is coloured by
+    // its local position along the axis (0 at the start edge, 1 at the end of `extent`), so `start` fades
+    // to `end` across the shape. Reuses the same cached mesh as a solid fill — only per-vertex colour
+    // differs — so the tessellation stays memoised and no solid draw path is touched.
+    private func emitMeshGradient(
+        renderer: CPointer<Unit>,
+        mesh: CachedMesh,
+        dx: Float32,
+        dy: Float32,
+        extent: Float32,
+        vertical: Bool,
+        start: Color,
+        end: Color
+    ): Unit {
+        let vc = mesh.vertCount
+        let ic = mesh.idxCount
+        if (vc == 0 || ic == 0 || renderer.isNull() || mesh.relVerts.isNull() || mesh.indices.isNull()) {
+            return
+        }
+        ensureCapacity(vc, 0)
+        if (verts.isNull()) {
+            return
+        }
+        let sr = Float32(Int64(start.r)) / 255.0
+        let sg = Float32(Int64(start.g)) / 255.0
+        let sb = Float32(Int64(start.b)) / 255.0
+        let sa = Float32(Int64(start.a)) / 255.0
+        let er = Float32(Int64(end.r)) / 255.0
+        let eg = Float32(Int64(end.g)) / 255.0
+        let eb = Float32(Int64(end.b)) / 255.0
+        let ea = Float32(Int64(end.a)) / 255.0
+        let span = max(0.0001, extent)
+        var i: Int64 = 0
+        while (i < vc) {
+            var vertex = unsafe { mesh.relVerts.read(i) }
+            // Local position along the gradient axis, read before translation, normalised to 0..1.
+            let axis = if (vertical) {
+                vertex.py
+            } else {
+                vertex.px
+            }
+            var t = axis / span
+            if (t < 0.0) {
+                t = 0.0
+            } else if (t > 1.0) {
+                t = 1.0
+            }
+            vertex.px = vertex.px + dx
+            vertex.py = vertex.py + dy
+            // Fold the mesh's feather coverage (stored in colA) into the interpolated alpha.
+            vertex.colA = (sa + (ea - sa) * t) * vertex.colA
+            vertex.colR = sr + (er - sr) * t
+            vertex.colG = sg + (eg - sg) * t
+            vertex.colB = sb + (eb - sb) * t
+            unsafe { verts.write(i, vertex) }
+            i += 1
+        }
+        let _ = unsafe {
+            SDL_RenderGeometry(renderer, CPointer<Unit>(), verts, Int32(vc), mesh.indices, Int32(ic))
+        }
+    }
+
     private func addTri(indices: ArrayList<Int32>, a: Int64, b: Int64, c: Int64): Unit {
         indices.add(Int32(a))
         indices.add(Int32(b))
@@ -513,17 +704,56 @@ internal class GeometryBatch {
         pathY.clear()
         let r = min(radius, min(rect.w, rect.h) / 2.0)
         if (r < 0.75) {
+            // Kept inline rather than delegated: the dash march starts at the first path vertex, and
+            // rectangular dashed borders anchor their pattern at the top-left corner.
             pathAdd(rect.x, rect.y)
             pathAdd(rect.right(), rect.y)
             pathAdd(rect.right(), rect.bottom())
             pathAdd(rect.x, rect.bottom())
             return
         }
+        // One arc tracer for uniform and per-corner rounding, so the two can never drift apart.
+        buildRoundedRectPathPerCorner(rect, r, r, r, r)
+    }
+
+    // The one arc tracer for rounded-rect perimeters (buildRoundedRectPath delegates its arc case here),
+    // clockwise: top-right, bottom-right, bottom-left, top-left. A corner whose clamped radius is
+    // sub-pixel collapses to its sharp rectangle vertex.
+    private func buildRoundedRectPathPerCorner(
+        rect: Rect,
+        topLeft: Float32,
+        topRight: Float32,
+        bottomRight: Float32,
+        bottomLeft: Float32
+    ): Unit {
+        pathX.clear()
+        pathY.clear()
+        let maxR = min(rect.w, rect.h) / 2.0
+        let tl = clampF32(topLeft, 0.0, maxR)
+        let tr = clampF32(topRight, 0.0, maxR)
+        let br = clampF32(bottomRight, 0.0, maxR)
+        let bl = clampF32(bottomLeft, 0.0, maxR)
         let half = GEOM_PI / 2.0
-        pathArc(rect.right() - r, rect.y + r, r, -half, 0.0)
-        pathArc(rect.right() - r, rect.bottom() - r, r, 0.0, half)
-        pathArc(rect.x + r, rect.bottom() - r, r, half, GEOM_PI)
-        pathArc(rect.x + r, rect.y + r, r, GEOM_PI, GEOM_PI + half)
+        if (tr < 0.75) {
+            pathAdd(rect.right(), rect.y)
+        } else {
+            pathArc(rect.right() - tr, rect.y + tr, tr, -half, 0.0)
+        }
+        if (br < 0.75) {
+            pathAdd(rect.right(), rect.bottom())
+        } else {
+            pathArc(rect.right() - br, rect.bottom() - br, br, 0.0, half)
+        }
+        if (bl < 0.75) {
+            pathAdd(rect.x, rect.bottom())
+        } else {
+            pathArc(rect.x + bl, rect.bottom() - bl, bl, half, GEOM_PI)
+        }
+        if (tl < 0.75) {
+            pathAdd(rect.x, rect.y)
+        } else {
+            pathArc(rect.x + tl, rect.y + tl, tl, GEOM_PI, GEOM_PI + half)
+        }
     }
 
     private func buildCirclePath(center: Point, radius: Float32, minSegments: Int64): Unit {
@@ -751,126 +981,4 @@ internal class GeometryBatch {
 
 private func clampFeather(feather: Float32, minDimension: Float32): Float32 {
     max(0.1, min(feather, minDimension * 0.9))
-}
-
-// Quantizes a length to quarter-pixel units for mesh keying, TRUNCATING rather than rounding. The
-// truncation is deliberate: withinKeyBudget bounds each field with an exclusive upper limit at a
-// power of two, and floor keeps the largest in-budget value at exactly 2^bits - 1, so a boundary
-// value can never carry a bit into the adjacent packed field (rounding with +0.5 would turn, say,
-// radius 511.9 into 2048 and overflow the 11-bit radius field into `extra`). Sub-quarter-pixel size
-// differences share a mesh — an imperceptible size rounding, while the draw position stays exact.
-internal func quantizeLength(value: Float32): Int64 {
-    Int64(value * 4.0)
-}
-
-// True when a shape's dimensions fit the packed key's bit budget. An out-of-range shape bypasses the
-// cache and tessellates directly, so an extreme size can never alias onto another shape's mesh.
-private func withinKeyBudget(w: Float32, h: Float32, radius: Float32, extra: Float32): Bool {
-    w >= 0.0 && w < 8192.0 && h >= 0.0 && h < 8192.0 && radius >= 0.0 && radius < 512.0 && extra >= 0.0 && extra < 64.0
-}
-
-// Packs (kind, width, height, radius, extra) into one Int64 cache key. Field widths: kind 2 bits,
-// width/height 15 bits each (quarter-pixel, < 8192px), radius 11 bits (< 512px), extra 8 bits
-// (< 64px) — 51 bits total. withinKeyBudget bounds each length and quantizeLength truncates, so every
-// field stays at or below 2^width - 1 and distinct shapes never collide onto one key.
-internal func meshKey(kind: Int64, w: Float32, h: Float32, radius: Float32, extra: Float32): Int64 {
-    let qw = quantizeLength(w)
-    let qh = quantizeLength(h)
-    let qr = quantizeLength(radius)
-    let qe = quantizeLength(extra)
-    kind | (qw << 2) | (qh << 17) | (qr << 32) | (qe << 43)
-}
-
-// A tessellated shape in local coordinates, held in native buffers so per-frame emit is a tight
-// unsafe loop: relative positions live in each vertex's px/py and the feather coverage in its colA
-// (the draw colour is folded in at emit); the index buffer is invariant and handed straight to SDL.
-internal class CachedMesh {
-    let relVerts: CPointer<SdlVertex>
-    let indices: CPointer<Int32>
-    let vertCount: Int64
-    let idxCount: Int64
-
-    init(relVerts: CPointer<SdlVertex>, indices: CPointer<Int32>, vertCount: Int64, idxCount: Int64) {
-        this.relVerts = relVerts
-        this.indices = indices
-        this.vertCount = vertCount
-        this.idxCount = idxCount
-    }
-
-    // Frees the native buffers. Called when the mesh is evicted from the cache or the batch disposes.
-    func free(): Unit {
-        if (relVerts.isNotNull()) {
-            unsafe { LibC.free(relVerts) }
-        }
-        if (indices.isNotNull()) {
-            unsafe { LibC.free(indices) }
-        }
-    }
-}
-
-// A bounded, two-generation cache of shape meshes. When the active generation fills, the older
-// (retired) generation is dropped whole — running `destroy` on each mesh — and the current one
-// becomes retired; a hit in the retired generation is promoted back so a hot shape survives a
-// rotation. Because the meshes own native buffers, the promote path removes the mesh from the retired
-// generation BEFORE re-inserting it, so the rotation that insert may trigger cannot destroy the mesh
-// being returned — the same native-lifetime safeguard as the shaped-text cache. `destroy` is injected
-// (production frees the native buffers) so the eviction bookkeeping is unit-testable without a GPU.
-internal class MeshCache {
-    private let capacity: Int64
-    private let destroy: (CachedMesh) -> Unit
-    private var active = HashMap<Int64, CachedMesh>()
-    private var retired = HashMap<Int64, CachedMesh>()
-
-    init(capacity: Int64, destroy: (CachedMesh) -> Unit) {
-        this.capacity = max(1, capacity)
-        this.destroy = destroy
-    }
-
-    func get(key: Int64): ?CachedMesh {
-        match (active.get(key)) {
-            case Some(mesh) => return Some(mesh)
-            case None => ()
-        }
-        match (retired.get(key)) {
-            case Some(mesh) =>
-                let _ = retired.remove(key)
-                insert(key, mesh)
-                Some(mesh)
-            case None => None
-        }
-    }
-
-    func put(key: Int64, mesh: CachedMesh): Unit {
-        insert(key, mesh)
-    }
-
-    // Destroys every cached mesh across both generations. Called when the owning batch is disposed.
-    func freeAll(): Unit {
-        destroyGeneration(active)
-        active.clear()
-        destroyGeneration(retired)
-        retired.clear()
-    }
-
-    // Live entries across both generations — for tests and diagnostics.
-    func size(): Int64 {
-        active.size + retired.size
-    }
-
-    private func insert(key: Int64, mesh: CachedMesh): Unit {
-        if (active.size >= capacity) {
-            destroyGeneration(retired)
-            retired.clear()
-            let recycled = retired
-            retired = active
-            active = recycled
-        }
-        active[key] = mesh
-    }
-
-    private func destroyGeneration(generation: HashMap<Int64, CachedMesh>): Unit {
-        for ((_, mesh) in generation) {
-            destroy(mesh)
-        }
-    }
 }

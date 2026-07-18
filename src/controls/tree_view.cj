@@ -2,7 +2,7 @@ package cui.controls
 
 import std.collection.{ArrayList, HashSet}
 import sdl.{Color, FontSizes, IconName, Key, MouseButton, Pen, Rect, Size, UiEvent, drawIcon}
-import cui.core.{Bindable, CUI_SMALL_H, CursorShape, ScrollBar, State, UiContext, Widget, requireControlId,
+import cui.core.{Bindable, CUI_SMALL_H, CursorShape, ScrollBar, maxScrollOffset, State, UiContext, Widget, requireControlId,
     claimHoverIfInside, clampScrollOffset, drawSurface, drawVerticalScrollBar, emit, focusableControlIdentity,
     localState, scrollLineIndex, scrollLineRemainder, scrollOffsetAfterWheel}
 
@@ -188,9 +188,10 @@ public class TreeView <: Widget {
                 if (scrollBar.drag(ctx, frame, scrollStateValue, content, viewportH, y)) {
                     return true
                 }
-            case UiEvent.MouseWheel(_, wy, wx, pointerY) =>
-                if (frame.contains(wx, pointerY)) {
-                    scrollStateValue.value = scrollOffsetAfterWheel(scrollStateValue.value, wy, content, viewportH)
+            case UiEvent.MouseWheel(_, wheelY, pointerX, pointerY) =>
+                // Content that fits leaves the wheel to an enclosing scroller (no dead zone).
+                if (frame.contains(pointerX, pointerY) && maxScrollOffset(content, viewportH) > 0.0) {
+                    scrollStateValue.value = scrollOffsetAfterWheel(scrollStateValue.value, wheelY, content, viewportH)
                     return true
                 }
             case UiEvent.KeyDown(Key.Up, _) => return moveSelection(ctx, -1)

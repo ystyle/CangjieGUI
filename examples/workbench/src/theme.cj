@@ -10,16 +10,16 @@ let WORKBENCH_TITLE: Length = 20.fp
 
 func workbenchTheme(): Theme {
     Theme(
-        Color.rgb(236, 238, 243), // bg
-        Color.rgb(255, 255, 255), // panel
-        Color.rgb(216, 221, 230), // panelEdge
-        Color.rgb(28, 33, 42), // text
-        Color.rgb(108, 116, 132), // mutedText
-        Color.rgb(72, 108, 214), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(206, 74, 68), // danger
-        Color.rgb(247, 249, 252), // field
-        Color.rgb(236, 241, 252), // fieldActive
+        bg: Color.rgb(236, 238, 243),
+        panel: Color.rgb(255, 255, 255),
+        panelEdge: Color.rgb(216, 221, 230),
+        text: Color.rgb(28, 33, 42),
+        mutedText: Color.rgb(108, 116, 132),
+        accent: Color.rgb(72, 108, 214),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(206, 74, 68),
+        field: Color.rgb(247, 249, 252),
+        fieldActive: Color.rgb(236, 241, 252),
         panelRaised: Color.rgb(255, 255, 255),
         accentSoft: Color.rgb(224, 232, 251),
         shadow: Color.rgba(28, 40, 72, 28),

@@ -7,16 +7,16 @@ import cui.{Color, Theme}
 
 func notifyTheme(): Theme {
     Theme(
-        Color.rgb(26, 29, 38), // bg
-        Color.rgb(38, 42, 54), // panel
-        Color.rgb(54, 59, 74), // panelEdge
-        Color.rgb(232, 235, 242), // text
-        Color.rgb(150, 156, 170), // mutedText
-        Color.rgb(96, 132, 246), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(226, 92, 86), // danger
-        Color.rgb(46, 51, 64), // field
-        Color.rgb(54, 60, 78), // fieldActive
+        bg: Color.rgb(26, 29, 38),
+        panel: Color.rgb(38, 42, 54),
+        panelEdge: Color.rgb(54, 59, 74),
+        text: Color.rgb(232, 235, 242),
+        mutedText: Color.rgb(150, 156, 170),
+        accent: Color.rgb(96, 132, 246),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(226, 92, 86),
+        field: Color.rgb(46, 51, 64),
+        fieldActive: Color.rgb(54, 60, 78),
         panelRaised: Color.rgb(46, 51, 64),
         accentSoft: Color.rgb(52, 62, 96),
         shadow: Color.rgba(0, 0, 0, 120),

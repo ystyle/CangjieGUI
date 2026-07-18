@@ -5,6 +5,11 @@ import std.math.clamp
 private let MIN_CHANNEL: Int64 = 0
 private let MAX_CHANNEL: Int64 = 255
 
+/**
+ * An RGBA color with 8-bit channels. The `rgb`/`rgba` factories take 0-255 values and clamp anything
+ * outside that range (alpha defaults to opaque); `withAlpha` returns a copy at a new opacity and
+ * `lerp` blends toward another color, which is what the animation helpers interpolate with.
+ */
 public struct Color {
     public let r: UInt8
     public let g: UInt8
@@ -64,6 +69,7 @@ public struct Pen {
     }
 }
 
+/** A position in logical pixels — the coordinate space shared by layout, events, and drawing. */
 public struct Point {
     public let x: Float32
     public let y: Float32
@@ -88,6 +94,7 @@ public struct Point {
     }
 }
 
+/** A width/height extent in logical pixels, as produced by `Widget.measure` and consumed by layout. */
 public struct Size {
     public let w: Float32
     public let h: Float32
@@ -102,6 +109,10 @@ public struct Size {
     }
 }
 
+/**
+ * Per-edge spacing in logical pixels — padding, margins, gutters. `horizontal()` and `vertical()`
+ * sum the opposing edges, which is what layout subtracts from an available size.
+ */
 public struct Insets {
     public let top: Float32
     public let right: Float32
@@ -131,6 +142,12 @@ public struct Insets {
     }
 }
 
+/**
+ * An axis-aligned rectangle in logical pixels — origin `x`/`y` plus extent `w`/`h` — used for layout
+ * frames, hit tests, and clips. `contains` treats all four edges as inside (both `x` and `right()`
+ * hit), so adjacent frames both claim a point on their shared edge. `inset` and `intersection` clamp
+ * to zero extent rather than going negative.
+ */
 public struct Rect {
     public var x: Float32
     public var y: Float32

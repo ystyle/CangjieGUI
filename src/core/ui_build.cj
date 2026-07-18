@@ -1,7 +1,7 @@
 package cui.core
 
-import sdl.{Rect, Size, UiEvent}
 import std.collection.ArrayList
+import sdl.{Rect, Size, UiEvent}
 
 /*
  * Declarative builder support.
@@ -199,8 +199,13 @@ protected func registerFocusable(id: String): Unit {
     }
 }
 
-/** Assigns a build-order identity and registers it as a focus stop in one step. */
-protected func focusableControlIdentity(base: String): String {
+/*
+ * Assigns a build-order identity and registers it as a focus stop in one step. Public so
+ * application-defined widgets can join the Tab order exactly like built-in controls: call it in
+ * the constructor with a stable base name, then pair `ctx.hasFocus(id)` / `ctx.showFocusRing(id)`
+ * in `handle` / `draw` (see `examples/disclosure` for a complete custom row).
+ */
+public func focusableControlIdentity(base: String): String {
     let id = controlIdentity(base)
     registerFocusable(id)
     id
@@ -252,9 +257,10 @@ protected func collectFocusableIds(children: Array<Widget>): Array<String> {
 /*
  * Claims the pointer shape for `id` when a MouseMove falls inside `frame`. Controls call
  * this at the top of `handle` without consuming the event, so hover propagates to every
- * layer and the shell resolves the top-most claim (see `UiContext.claimHover`).
+ * layer and the shell resolves the top-most claim (see `UiContext.claimHover`). Public for
+ * application-defined widgets, which pair it with `ctx.isHovered(id)` in `draw`.
  */
-protected func claimHoverIfInside(ctx: UiContext, event: UiEvent, frame: Rect, id: String, shape: CursorShape): Unit {
+public func claimHoverIfInside(ctx: UiContext, event: UiEvent, frame: Rect, id: String, shape: CursorShape): Unit {
     match (event) {
         case UiEvent.MouseMove(x, y) => if (frame.contains(x, y)) {
             ctx.claimHover(id, shape)

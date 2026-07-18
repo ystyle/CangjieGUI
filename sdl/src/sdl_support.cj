@@ -64,7 +64,9 @@ internal func destroyCreatedResources(window: CPointer<Unit>, renderer: CPointer
         if (window.isNotNull()) {
             SDL_DestroyWindow(window)
         }
-        SDL_Quit()
+        // Ref-counted quit: a failed second window must not tear the subsystem down under
+        // an already-open one (SDL_Quit() would destroy its window and renderer too).
+        SDL_QuitSubSystem(SDL_INIT_VIDEO)
     }
 }
 

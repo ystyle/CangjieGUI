@@ -14,16 +14,16 @@ let TIMELINE_MUTED: Color = Color.rgb(120, 126, 140)
 
 func timelineTheme(): Theme {
     Theme(
-        Color.rgb(238, 239, 245), // bg
-        Color.rgb(255, 255, 255), // panel
-        Color.rgb(220, 222, 232), // panelEdge
-        Color.rgb(30, 32, 44), // text
-        Color.rgb(116, 120, 136), // mutedText
-        Color.rgb(88, 96, 214), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(206, 74, 68), // danger
-        Color.rgb(247, 248, 251), // field
-        Color.rgb(236, 238, 250), // fieldActive
+        bg: Color.rgb(238, 239, 245),
+        panel: Color.rgb(255, 255, 255),
+        panelEdge: Color.rgb(220, 222, 232),
+        text: Color.rgb(30, 32, 44),
+        mutedText: Color.rgb(116, 120, 136),
+        accent: Color.rgb(88, 96, 214),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(206, 74, 68),
+        field: Color.rgb(247, 248, 251),
+        fieldActive: Color.rgb(236, 238, 250),
         panelRaised: Color.rgb(255, 255, 255),
         accentSoft: Color.rgb(226, 228, 250),
         shadow: Color.rgba(30, 34, 66, 26),

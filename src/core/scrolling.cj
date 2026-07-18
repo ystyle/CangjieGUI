@@ -25,7 +25,7 @@ protected func scrollOffsetAfterWheel(
     clampF32(current - wheelY * CUI_SCROLL_WHEEL_STEP, 0.0, maxScrollOffset(contentH, viewportH))
 }
 
-internal func maxScrollOffset(contentH: Float32, viewportH: Float32): Float32 {
+protected func maxScrollOffset(contentH: Float32, viewportH: Float32): Float32 {
     max(0.0, contentH - viewportH)
 }
 
@@ -102,7 +102,6 @@ internal func scrollOffsetForThumbTop(
  */
 public class ScrollBar {
     private let dragId: String
-    private var grabDy: Float32 = 0.0
 
     public init(dragId: String) {
         this.dragId = dragId
@@ -130,8 +129,10 @@ public class ScrollBar {
         match (scrollThumbRect(frame, offset.value, contentH, viewportH)) {
             case Some(thumb) =>
                 if (thumb.contains(x, y)) {
-                    ctx.beginDrag(dragId)
-                    grabDy = y - thumb.y
+                    // The grab point rides in the context beside the drag id: this controller is
+                    // rebuilt with the tree every frame, so an instance field would reset to zero
+                    // before the next frame's MouseMove and the thumb would snap to the pointer.
+                    ctx.beginDrag(dragId, grab: y - thumb.y)
                     return true
                 }
                 if (scrollBarTrackRect(frame).contains(x, y)) {
@@ -161,7 +162,7 @@ public class ScrollBar {
         if (ctx.isDragging(dragId) && ctx.leftMouseDown) {
             let track = scrollBarTrackRect(frame)
             let thumbH = scrollThumbHeight(track, contentH, viewportH)
-            offset.value = scrollOffsetForThumbTop(y - grabDy, track, thumbH, contentH, viewportH)
+            offset.value = scrollOffsetForThumbTop(y - ctx.dragGrab(), track, thumbH, contentH, viewportH)
             return true
         }
         false
@@ -280,7 +281,6 @@ protected func drawHorizontalScrollBar(
  */
 public class HScrollBar {
     private let dragId: String
-    private var grabDx: Float32 = 0.0
 
     public init(dragId: String) {
         this.dragId = dragId
@@ -307,8 +307,8 @@ public class HScrollBar {
         match (scrollThumbRectH(frame, offset.value, contentW, viewportW)) {
             case Some(thumb) =>
                 if (thumb.contains(x, y)) {
-                    ctx.beginDrag(dragId)
-                    grabDx = x - thumb.x
+                    // Grab point lives in the context for the same rebuild-survival reason as ScrollBar.
+                    ctx.beginDrag(dragId, grab: x - thumb.x)
                     return true
                 }
                 if (scrollBarTrackRectH(frame).contains(x, y)) {
@@ -338,7 +338,7 @@ public class HScrollBar {
         if (ctx.isDragging(dragId) && ctx.leftMouseDown) {
             let track = scrollBarTrackRectH(frame)
             let thumbW = scrollThumbWidth(track, contentW, viewportW)
-            offset.value = scrollOffsetForThumbLeft(x - grabDx, track, thumbW, contentW, viewportW)
+            offset.value = scrollOffsetForThumbLeft(x - ctx.dragGrab(), track, thumbW, contentW, viewportW)
             return true
         }
         false

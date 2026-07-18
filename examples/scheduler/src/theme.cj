@@ -10,16 +10,16 @@ let SCHEDULER_DANGER: Color = Color.rgb(206, 74, 68)
 
 func schedulerTheme(): Theme {
     Theme(
-        Color.rgb(240, 243, 246), // bg
-        Color.rgb(255, 255, 255), // panel
-        Color.rgb(222, 227, 232), // panelEdge
-        Color.rgb(28, 34, 42), // text
-        Color.rgb(116, 124, 136), // mutedText
-        Color.rgb(20, 148, 168), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(206, 74, 68), // danger
-        Color.rgb(246, 249, 251), // field
-        Color.rgb(232, 244, 246), // fieldActive
+        bg: Color.rgb(240, 243, 246),
+        panel: Color.rgb(255, 255, 255),
+        panelEdge: Color.rgb(222, 227, 232),
+        text: Color.rgb(28, 34, 42),
+        mutedText: Color.rgb(116, 124, 136),
+        accent: Color.rgb(20, 148, 168),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(206, 74, 68),
+        field: Color.rgb(246, 249, 251),
+        fieldActive: Color.rgb(232, 244, 246),
         panelRaised: Color.rgb(252, 254, 255),
         accentSoft: Color.rgb(214, 240, 244),
         shadow: Color.rgba(24, 40, 52, 22),

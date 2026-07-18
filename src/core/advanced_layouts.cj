@@ -367,7 +367,9 @@ public class ScrollView <: Widget {
     public func handle(ctx: UiContext, event: UiEvent): Bool {
         match (event) {
             case UiEvent.MouseWheel(_, wheelY, pointerX, pointerY) =>
-                if (frame.contains(pointerX, pointerY)) {
+                // A surface whose content fits does not own the wheel: consuming here would open a
+                // dead zone inside an enclosing scroller, so the event falls through instead.
+                if (frame.contains(pointerX, pointerY) && maxScrollOffset(contentHeight, frame.h) > 0.0) {
                     scrollOffset.value = scrollOffsetAfterWheel(scrollOffset.value, wheelY, contentHeight, frame.h)
                     return true
                 }

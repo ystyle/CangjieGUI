@@ -10,16 +10,16 @@ let CATALOG_PRICE: Color = Color.rgb(210, 96, 58)
 
 func catalogTheme(): Theme {
     Theme(
-        Color.rgb(243, 244, 248), // bg
-        Color.rgb(255, 255, 255), // panel
-        Color.rgb(224, 227, 234), // panelEdge
-        Color.rgb(32, 36, 46), // text
-        Color.rgb(120, 126, 140), // mutedText
-        Color.rgb(64, 108, 220), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(206, 74, 68), // danger
-        Color.rgb(247, 249, 252), // field
-        Color.rgb(236, 240, 249), // fieldActive
+        bg: Color.rgb(243, 244, 248),
+        panel: Color.rgb(255, 255, 255),
+        panelEdge: Color.rgb(224, 227, 234),
+        text: Color.rgb(32, 36, 46),
+        mutedText: Color.rgb(120, 126, 140),
+        accent: Color.rgb(64, 108, 220),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(206, 74, 68),
+        field: Color.rgb(247, 249, 252),
+        fieldActive: Color.rgb(236, 240, 249),
         panelRaised: Color.rgb(252, 253, 255),
         accentSoft: Color.rgb(224, 231, 250),
         shadow: Color.rgba(30, 38, 66, 22),

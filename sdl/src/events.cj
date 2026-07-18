@@ -1,5 +1,11 @@
 package sdl
 
+/**
+ * A keyboard key decoded from the SDL scancode — physical, layout-independent keys. `Letter` carries
+ * the uppercase ASCII code (A-Z) and `Digit` the ASCII digit code ('0'-'9'); anything unmapped
+ * arrives as `RawScancode`, so no press is dropped. Printable text does not come through here — it
+ * arrives already composed (IME included) as `UiEvent.TextInput`.
+ */
 public enum Key {
     | Escape
     | Backspace
@@ -18,6 +24,7 @@ public enum Key {
     | RawScancode(Int32)
 }
 
+/** A decoded mouse button; buttons beyond left/middle/right arrive as `RawCode` with SDL's code. */
 public enum MouseButton {
     | Left
     | Middle
@@ -25,6 +32,10 @@ public enum MouseButton {
     | RawCode(UInt8)
 }
 
+/**
+ * Frame timing in milliseconds: `elapsedMs` since SDL initialization and `deltaMs` since the previous
+ * frame. Animations advance by `deltaMs`, so their speed is independent of the frame rate.
+ */
 public struct FrameInfo {
     public let elapsedMs: UInt64
     public let deltaMs: UInt64
@@ -35,6 +46,15 @@ public struct FrameInfo {
     }
 }
 
+/*
+ * A decoded SDL input event, offered to `Widget.handle` in arrival order. Pointer coordinates are in
+ * logical pixels — the window divides out its scale, so events land in the same space as layout and
+ * drawing. `MouseWheel`'s payload order is (wheelX, wheelY, mouseX, mouseY): the two SCROLL DELTAS
+ * first, then the pointer position — destructuring it position-first silently turns scrolling into
+ * hit testing. `KeyDown`'s `Bool` is the key-repeat flag. `Frame` is synthesized by the shell once
+ * per rendered frame rather than polled from SDL; `Unknown` carries the raw SDL event type of
+ * anything not decoded.
+ */
 public enum UiEvent {
     | Frame(FrameInfo)
     | Quit

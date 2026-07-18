@@ -67,7 +67,7 @@ func lazyListLaysRowsAtVariableOffsets(): Unit {
     let list = LazyList(4, {i => heights[i]}, id: "test.lazylist.layout") {
         index => emit(probes[index])
     }
-    row_layout(ctx, list) // tall viewport so all four are visible
+    rowLayout(ctx, list) // tall viewport so all four are visible
 
     // tops = [0, 80, 120, 240]; each row is placed at its cumulative top with its own height.
     @Expect(probes[0].rect.y, Float32(0.0))
@@ -105,6 +105,6 @@ func lazyListWheelScrollsVertically(): Unit {
 }
 
 // Lays out a list in a viewport tall enough to show every one of the (few) test rows.
-private func row_layout(ctx: UiContext, list: LazyList): Unit {
+private func rowLayout(ctx: UiContext, list: LazyList): Unit {
     list.layout(ctx, Rect(0.0, 0.0, 300.0, 1000.0))
 }

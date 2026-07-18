@@ -1,5 +1,10 @@
 package sdl
 
+/**
+ * Construction-time window options: title, logical size, DPI/scale behaviour, vsync, and the
+ * renderer's supersample factor. A plain value read once by `SdlWindow` (or `DesktopApp`);
+ * changing a spec after creation has no effect on the window.
+ */
 public struct WindowSpec {
     public let title: String
     public let width: Int32
@@ -39,6 +44,14 @@ public struct WindowSpec {
     }
 }
 
+/*
+ * An SDL window paired with its `Renderer`, created together and closed together. `width`/`height`
+ * and every event and drawing coordinate are logical pixels; `scale` maps them to window pixels.
+ * The constructor initializes the video subsystem and starts text input, throwing `CuiException` on
+ * failure. `close()` is idempotent and releases the renderer, the window, and one video-subsystem
+ * reference — SDL3 ref-counts subsystem init, so closing one window never tears the subsystem down
+ * under another still-open window.
+ */
 public class SdlWindow <: Resource {
     internal let windowPtr: CPointer<Unit>
     private let rendererPtr: CPointer<Unit>
@@ -165,7 +178,10 @@ public class SdlWindow <: Resource {
             if (windowPtr.isNotNull()) {
                 SDL_DestroyWindow(windowPtr)
             }
-            SDL_Quit()
+            // Balances this window's SDL_Init. Subsystem init is ref-counted in SDL3, so with
+            // two live windows closing one must not tear down the video subsystem under the
+            // other — SDL_Quit() here would destroy every remaining window and renderer.
+            SDL_QuitSubSystem(SDL_INIT_VIDEO)
         }
     }
 }

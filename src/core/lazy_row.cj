@@ -157,7 +157,8 @@ public class LazyRow <: Widget {
                 // The wheel scrolls the strip along its axis. A horizontal delta (trackpad pan, tilt
                 // wheel) drives it directly; otherwise the vertical wheel is remapped so a plain mouse
                 // scrolls too — wheel toward the user (scroll down) advances the strip right.
-                if (frame.contains(pointerX, pointerY)) {
+                // Content that fits leaves the wheel to an enclosing scroller (no dead zone).
+                if (frame.contains(pointerX, pointerY) && maxScrollOffset(content, viewportW) > 0.0) {
                     let delta = if (wheelX != 0.0) {
                         -wheelX
                     } else {

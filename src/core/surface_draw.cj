@@ -36,9 +36,10 @@ protected func drawSurface(ctx: UiContext, rect: Rect, style: SurfaceStyle): Uni
  * A keyboard focus ring: an accent rounded outline hugging the control, drawn a couple of pixels
  * outside its bounds so it reads as a halo distinct from the control's own edge. Every focusable
  * control paints one (gated on `showFocusRing`, so it shows for keyboard focus only), giving Tab
- * navigation a uniform, visible indicator across buttons, toggles and fields alike.
+ * navigation a uniform, visible indicator across buttons, toggles and fields alike. Public so
+ * application-defined widgets draw the same ring as built-in controls.
  */
-protected func drawFocusRing(ctx: UiContext, rect: Rect, radius: Float32): Unit {
+public func drawFocusRing(ctx: UiContext, rect: Rect, radius: Float32): Unit {
     ctx.renderer.strokeRoundedRect(rect.inset(-2.0), radius + 2.0, Pen(width: 1.6, color: ctx.theme.accent))
 }
 

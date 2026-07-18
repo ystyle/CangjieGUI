@@ -14,16 +14,16 @@ let BOOKING_DANGER: Color = Color.rgb(198, 84, 66)
 
 func bookingTheme(): Theme {
     Theme(
-        Color.rgb(244, 242, 236), // bg
-        Color.rgb(255, 255, 255), // panel
-        Color.rgb(224, 220, 210), // panelEdge
-        Color.rgb(34, 38, 34), // text
-        Color.rgb(116, 120, 112), // mutedText
-        Color.rgb(46, 138, 106), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(198, 84, 66), // danger
-        Color.rgb(248, 248, 244), // field
-        Color.rgb(234, 244, 238), // fieldActive
+        bg: Color.rgb(244, 242, 236),
+        panel: Color.rgb(255, 255, 255),
+        panelEdge: Color.rgb(224, 220, 210),
+        text: Color.rgb(34, 38, 34),
+        mutedText: Color.rgb(116, 120, 112),
+        accent: Color.rgb(46, 138, 106),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(198, 84, 66),
+        field: Color.rgb(248, 248, 244),
+        fieldActive: Color.rgb(234, 244, 238),
         panelRaised: Color.rgb(255, 255, 255),
         accentSoft: Color.rgb(224, 240, 232),
         shadow: Color.rgba(40, 50, 40, 26),

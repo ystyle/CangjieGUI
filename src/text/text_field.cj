@@ -14,6 +14,15 @@ private let LETTER_X: UInt8 = 88
 private let LETTER_Y: UInt8 = 89
 private let LETTER_Z: UInt8 = 90
 
+/*
+ * A single-line text editor bound to a `Bindable<String>`. The caret and selection anchor are BYTE
+ * offsets into the UTF-8 text, not character counts; a caller supplying its own `cursor`/`anchor`
+ * states must keep them on rune boundaries and move the pair together, or the stale anchor spans a
+ * selection the user never made. Editing follows the desktop conventions: mouse and double-click-word
+ * selection, the Ctrl+A/C/X/V/Z/Y table, grouped undo, and a horizontal follow window that keeps the
+ * caret visible. Caret, selection, and scroll state are retained across the per-frame rebuild under
+ * the control identity; `editable: false` renders read-only and stays out of Tab traversal.
+ */
 public class TextField <: Widget {
     private let id: String
     private let text: Bindable<String>

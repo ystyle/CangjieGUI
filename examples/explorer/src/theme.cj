@@ -13,16 +13,16 @@ let EXPLORER_MUTED: Color = Color.rgb(120, 127, 140)
 
 func explorerTheme(): Theme {
     Theme(
-        Color.rgb(242, 244, 248), // bg
-        Color.rgb(255, 255, 255), // panel
-        Color.rgb(224, 228, 234), // panelEdge
-        Color.rgb(30, 35, 44), // text
-        Color.rgb(120, 127, 140), // mutedText
-        Color.rgb(60, 110, 224), // accent
-        Color.rgb(255, 255, 255), // accentText
-        Color.rgb(206, 74, 68), // danger
-        Color.rgb(247, 249, 252), // field
-        Color.rgb(235, 241, 250), // fieldActive
+        bg: Color.rgb(242, 244, 248),
+        panel: Color.rgb(255, 255, 255),
+        panelEdge: Color.rgb(224, 228, 234),
+        text: Color.rgb(30, 35, 44),
+        mutedText: Color.rgb(120, 127, 140),
+        accent: Color.rgb(60, 110, 224),
+        accentText: Color.rgb(255, 255, 255),
+        danger: Color.rgb(206, 74, 68),
+        field: Color.rgb(247, 249, 252),
+        fieldActive: Color.rgb(235, 241, 250),
         panelRaised: Color.rgb(252, 253, 255),
         accentSoft: Color.rgb(224, 233, 250),
         shadow: Color.rgba(28, 40, 66, 20),

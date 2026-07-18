@@ -17,6 +17,15 @@ import cui.core.{CursorShape, StateStore, Theme, UiContext, Widget, buildRoot, c
 // (dialog-free examples fetch data on worker threads) to land in the frame.
 private let SNAPSHOT_SETTLE_FRAMES: UInt64 = 48
 
+/*
+ * The desktop shell: owns the SDL window and runs the frame loop that rebuilds the widget tree from
+ * `run`'s body, lays it out, dispatches input, and draws. Idle frames are skipped — a frame is only
+ * rendered on input, a `State` write, a resize, or a widget's `ctx.requestFrame()`, so time-driven
+ * animation must request frames or it freezes. The loop brackets pointer dispatch with the context's
+ * focus/hover/click-count protocols, routes events to open overlays before the tree, and paints the
+ * tooltip and overlay passes above the tree. Resources registered with `manage` are closed in reverse
+ * order, then the window — even when a widget throws out of the loop.
+ */
 public class DesktopApp {
     private let window: SdlWindow
     private let ctx: UiContext

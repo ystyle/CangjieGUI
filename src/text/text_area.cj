@@ -2,7 +2,7 @@ package cui.text
 
 import sdl.{FontSizes, Key, MouseButton, Point, Rect, Size, UiEvent}
 import sdl.input.{Clipboard, Keyboard}
-import cui.core.{Bindable, CUI_SMALL_H, CursorShape, ScrollBar, State, UiContext, Widget, claimHoverIfInside,
+import cui.core.{Bindable, CUI_SMALL_H, CursorShape, ScrollBar, maxScrollOffset, State, UiContext, Widget, claimHoverIfInside,
     clampScrollOffset, drawSurface, drawVerticalScrollBar, emit, localState, registerFocusable, resolveControlKey,
     scrollLineIndex, scrollLineRemainder, scrollOffsetAfterWheel}
 
@@ -35,6 +35,14 @@ class TextLineCache {
     }
 }
 
+/*
+ * A multi-line text editor bound to a `Bindable<String>`, with vertical scrolling and a scroll bar.
+ * As in `TextField`, the caret and selection anchor are BYTE offsets into the UTF-8 text; an owner
+ * that moves the cursor from outside (loading a file, a programmatic paste) must move the anchor with
+ * it, or the next keystroke replaces a selection the user never made. The document's line split is
+ * cached by the text's revision, so scrolling does not re-split the whole text every frame.
+ * `editable: false` renders read-only and stays out of Tab traversal.
+ */
 public class TextArea <: Widget {
     private let id: String
     private let text: Bindable<String>
@@ -162,10 +170,12 @@ public class TextArea <: Widget {
                     edit.extendTo(pointOffset(ctx, x, y))
                     return true
                 }
-            case UiEvent.MouseWheel(_, wy, wx, pointerY) =>
-                if (frame.contains(wx, pointerY)) {
-                    scrollStateValue.value = scrollOffsetAfterWheel(scrollStateValue.value, wy,
-                        textContentHeight(lines()), textViewport(frame).h)
+            case UiEvent.MouseWheel(_, wheelY, pointerX, pointerY) =>
+                // Content that fits leaves the wheel to an enclosing scroller (no dead zone).
+                let contentH = textContentHeight(lines())
+                let viewportH = textViewport(frame).h
+                if (frame.contains(pointerX, pointerY) && maxScrollOffset(contentH, viewportH) > 0.0) {
+                    scrollStateValue.value = scrollOffsetAfterWheel(scrollStateValue.value, wheelY, contentH, viewportH)
                     return true
                 }
             case UiEvent.TextInput(value) => return recordedEdit(ctx, {=> edit.insert(value)})

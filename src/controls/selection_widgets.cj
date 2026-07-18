@@ -1,7 +1,7 @@
 package cui.controls
 
 import sdl.{Color, FontSizes, Key, MouseButton, Rect, Size, UiEvent}
-import cui.core.{Bindable, CUI_CONTROL_H, CUI_SMALL_H, CursorShape, ScrollBar, Spring, State, UiContext, Widget, requireControlId,
+import cui.core.{Bindable, CUI_CONTROL_H, CUI_SMALL_H, CursorShape, ScrollBar, maxScrollOffset, Spring, State, UiContext, Widget, requireControlId,
     claimHoverIfInside, clampScrollOffset, drawFocusRing, drawSurface, drawVerticalScrollBar, emit,
     focusableControlIdentity, localState, reregisterFocusable, scrollLineIndex, scrollLineRemainder,
     scrollOffsetAfterWheel}
@@ -221,9 +221,10 @@ public class ListView <: Widget {
                 if (scrollBar.drag(ctx, frame, scrollStateValue, contentH, viewportH, y)) {
                     return true
                 }
-            case UiEvent.MouseWheel(_, wy, wx, pointerY) =>
-                if (frame.contains(wx, pointerY)) {
-                    scrollStateValue.value = scrollOffsetAfterWheel(scrollStateValue.value, wy, contentH, viewportH)
+            case UiEvent.MouseWheel(_, wheelY, pointerX, pointerY) =>
+                // Content that fits leaves the wheel to an enclosing scroller (no dead zone).
+                if (frame.contains(pointerX, pointerY) && maxScrollOffset(contentH, viewportH) > 0.0) {
+                    scrollStateValue.value = scrollOffsetAfterWheel(scrollStateValue.value, wheelY, contentH, viewportH)
                     return true
                 }
             case UiEvent.KeyDown(Key.Up, _) => return moveSelection(ctx, -1)
