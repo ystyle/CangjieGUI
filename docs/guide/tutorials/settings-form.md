@@ -87,14 +87,7 @@ examples/settings/
     └── model_test.cj  # 不启动窗口也能运行的模型检查
 ```
 
-这不是“建议以后再拆”的伪代码：这些文件就在当前项目中，包名和可见性已经配好。`main.cj` 不保存设置规则，`views.cj` 不创建第二份业务状态，`model_test.cj` 不依赖窗口。用下面的命令从项目目录验证最终产物：
-
-```powershell
-cd cui/examples/settings
-cjpm build
-$env:PATH = "C:\path\to\project\sdl\.sdl3;$env:PATH"
-.\target\release\bin\main.exe --snapshot "settings-final.bmp"
-```
+这不是“建议以后再拆”的伪代码：这些文件就在当前项目中，包名和可见性已经配好。`main.cj` 不保存设置规则，`views.cj` 不创建第二份业务状态，`model_test.cj` 不依赖窗口。
 
 若你只复制了单文件示例，先完成本节再进入下一条路线。这样后续的工作台、文件对话框和发布任务都有真实的模型/视图边界可复用，不会在最后一页才第一次面对包名、文件可见性和启动入口。
 
