@@ -112,6 +112,11 @@ public class DesktopApp {
         FileDialogs.openFolder(options: options, window: Some(window))
     }
 
+    /** Toggles fullscreen on/off. */
+    public func setFullscreen(fullscreen: Bool): Unit {
+        window.setFullscreen(fullscreen)
+    }
+
     public func run(body: () -> Unit): Unit {
         // The finally block keeps shutdown deterministic even when a widget throws out of
         // the frame loop: managed resources close in reverse order, then the window.
